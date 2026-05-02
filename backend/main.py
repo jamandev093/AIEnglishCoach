@@ -28,9 +28,7 @@ def analyze(data: dict):
 
 @app.post("/speech/analyze")
 async def speech_analyze(file: UploadFile = File(...)):
-    # Phase 1: fake STT for testing full audio upload pipeline
     spoken_text = await fake_transcribe_audio(file)
-
     result = analyze_sentence(spoken_text)
 
     return {
