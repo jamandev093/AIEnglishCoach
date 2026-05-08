@@ -1,112 +1,1442 @@
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { useLearningMode } from "../src/hooks/useLearningMode";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
 import * as Speech from "expo-speech";
-import { updateAnalytics } from "@/src/utils/analyticsSystem";
-import BackButton from "../src/components/BackButton";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+import { addActivity } from "../src/utils/activityHistory";
+
+import {
+  defaultProfile,
+  getProfile,
+  ProfileData,
+} from "../src/utils/profileStore";
+
+import {
+  AppSettings,
+  defaultSettings,
+  getSettings,
+} from "../src/utils/settingsStore";
+
+import { getDisplayLanguage } from "../src/utils/languageMode";
+
+type PracticeState = "idle" | "recording" | "checked";
+type RepeatState = "idle" | "recording" | "saved";
+
+type KeyWord = {
+  word: string;
+  hindi: string;
+  bengali: string;
+  english: string;
+};
+
+type StoryQuestion = {
+  question: string;
+  answer: string;
+};
+
+type StoryItem = {
+  title: string;
+  topic: string;
+  pictureEmoji: string;
+  pictureTitle: string;
+  story: string;
+  hindiSummary: string;
+  bengaliSummary: string;
+  englishSummary: string;
+  keyWords: KeyWord[];
+  questions: StoryQuestion[];
+};
+
+type ResultData = {
+  score: number;
+  listeningScore: number;
+  speakingScore: number;
+  repeatAccuracy: number;
+  correction: string;
+  mistake: string;
+  coachTip: string;
+};
+
+const ACTION_COLOR = "#8499DC";
+
+const stories: StoryItem[] = [
+  {
+    title: "A Morning Market Visit",
+    topic: "Daily Life",
+    pictureEmoji: "🛒",
+    pictureTitle: "Morning market",
+    story:
+      "Today I went to the market. I bought vegetables and fruit. The shopkeeper was friendly. I asked the price and paid with cash.",
+    hindiSummary:
+      "आज मैं बाज़ार गया। मैंने सब्ज़ियाँ और फल खरीदे। दुकानदार अच्छा था। मैंने कीमत पूछी और नकद पैसे दिए।",
+    bengaliSummary:
+      "আজ আমি বাজারে গিয়েছিলাম। আমি সবজি ও ফল কিনেছি। দোকানদার ভালো ছিল। আমি দাম জিজ্ঞেস করেছি এবং নগদ টাকা দিয়েছি।",
+    englishSummary:
+      "The speaker visited the market, bought food, asked the price, and paid with cash.",
+    keyWords: [
+      {
+        word: "market",
+        hindi: "बाज़ार",
+        bengali: "বাজার",
+        english: "place to buy things",
+      },
+      {
+        word: "bought",
+        hindi: "खरीदा",
+        bengali: "কিনেছি",
+        english: "purchased",
+      },
+      {
+        word: "vegetables",
+        hindi: "सब्ज़ियाँ",
+        bengali: "সবজি",
+        english: "green food plants",
+      },
+      {
+        word: "price",
+        hindi: "कीमत",
+        bengali: "দাম",
+        english: "cost",
+      },
+      {
+        word: "cash",
+        hindi: "नकद",
+        bengali: "নগদ টাকা",
+        english: "money notes or coins",
+      },
+    ],
+    questions: [
+      {
+        question: "Where did the speaker go today?",
+        answer: "The speaker went to the market.",
+      },
+      {
+        question: "What did the speaker buy?",
+        answer: "The speaker bought vegetables and fruit.",
+      },
+      {
+        question: "How was the shopkeeper?",
+        answer: "The shopkeeper was friendly.",
+      },
+      {
+        question: "How did the speaker pay?",
+        answer: "The speaker paid with cash.",
+      },
+    ],
+  },
+  {
+    title: "At the Doctor",
+    topic: "Health",
+    pictureEmoji: "🏥",
+    pictureTitle: "Doctor visit",
+    story:
+      "I visited the doctor because I had a fever. The doctor checked me and gave me medicine. He told me to drink water and rest.",
+    hindiSummary:
+      "मुझे बुखार था इसलिए मैं डॉक्टर के पास गया। डॉक्टर ने जांच की और दवा दी। उन्होंने पानी पीने और आराम करने को कहा।",
+    bengaliSummary:
+      "আমার জ্বর ছিল, তাই আমি ডাক্তারের কাছে গিয়েছিলাম। ডাক্তার আমাকে পরীক্ষা করে ওষুধ দিয়েছেন। তিনি পানি পান করতে এবং বিশ্রাম নিতে বলেছেন।",
+    englishSummary:
+      "The speaker had a fever, visited the doctor, got medicine, and was told to rest.",
+    keyWords: [
+      {
+        word: "doctor",
+        hindi: "डॉक्टर",
+        bengali: "ডাক্তার",
+        english: "medical person",
+      },
+      {
+        word: "fever",
+        hindi: "बुखार",
+        bengali: "জ্বর",
+        english: "high body temperature",
+      },
+      {
+        word: "checked",
+        hindi: "जांच की",
+        bengali: "পরীক্ষা করেছেন",
+        english: "examined",
+      },
+      {
+        word: "medicine",
+        hindi: "दवा",
+        bengali: "ওষুধ",
+        english: "treatment drug",
+      },
+      {
+        word: "rest",
+        hindi: "आराम",
+        bengali: "বিশ্রাম",
+        english: "relax or recover",
+      },
+    ],
+    questions: [
+      {
+        question: "Why did the speaker visit the doctor?",
+        answer: "The speaker visited the doctor because he had a fever.",
+      },
+      {
+        question: "What did the doctor give?",
+        answer: "The doctor gave medicine.",
+      },
+      {
+        question: "What did the doctor tell the speaker to do?",
+        answer: "The doctor told the speaker to drink water and rest.",
+      },
+    ],
+  },
+  {
+    title: "First Day at Work",
+    topic: "Work",
+    pictureEmoji: "💼",
+    pictureTitle: "First work day",
+    story:
+      "It was my first day at work. I met my manager and introduced myself to the team. I felt nervous at first, but everyone was helpful.",
+    hindiSummary:
+      "यह मेरा काम का पहला दिन था। मैं अपने मैनेजर से मिला और टीम से अपना परिचय कराया। पहले मैं घबराया हुआ था, लेकिन सभी मददगार थे।",
+    bengaliSummary:
+      "এটি ছিল আমার কাজের প্রথম দিন। আমি আমার ম্যানেজারের সাথে দেখা করেছি এবং টিমের কাছে নিজেকে পরিচয় করিয়েছি। প্রথমে নার্ভাস লাগছিল, কিন্তু সবাই সাহায্য করেছে।",
+    englishSummary:
+      "The speaker started a new job, met the manager, introduced himself, and felt supported.",
+    keyWords: [
+      {
+        word: "manager",
+        hindi: "मैनेजर",
+        bengali: "ম্যানেজার",
+        english: "work leader",
+      },
+      {
+        word: "introduced",
+        hindi: "परिचय कराया",
+        bengali: "পরিচয় করিয়েছি",
+        english: "told who someone is",
+      },
+      {
+        word: "team",
+        hindi: "टीम",
+        bengali: "টিম",
+        english: "group working together",
+      },
+      {
+        word: "nervous",
+        hindi: "घबराया हुआ",
+        bengali: "নার্ভাস",
+        english: "worried or anxious",
+      },
+      {
+        word: "helpful",
+        hindi: "मददगार",
+        bengali: "সহায়ক",
+        english: "ready to help",
+      },
+    ],
+    questions: [
+      {
+        question: "How did the speaker feel at first?",
+        answer: "The speaker felt nervous at first.",
+      },
+      {
+        question: "Who did the speaker meet?",
+        answer: "The speaker met the manager.",
+      },
+      {
+        question: "What did the speaker do with the team?",
+        answer: "The speaker introduced himself to the team.",
+      },
+      {
+        question: "How were the people at work?",
+        answer: "Everyone was helpful.",
+      },
+    ],
+  },
+];
 
 export default function ReadingListeningScreen() {
-  const mode = useLearningMode();
+  const [profile, setProfile] = useState<ProfileData>(defaultProfile);
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
-  if (!mode) return null;
+  const [selectedStory, setSelectedStory] = useState<StoryItem>(stories[0]);
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
+  const [practiceState, setPracticeState] = useState<PracticeState>("idle");
+  const [repeatState, setRepeatState] = useState<RepeatState>("idle");
+  const [showResultPopup, setShowResultPopup] = useState(false);
 
-  let sentence = "";
-  let meaning = "";
-  let tip = "";
+  const selectedQuestion = selectedStory.questions[selectedQuestionIndex];
 
-  // 🔥 Adaptive Logic
-  if (mode.difficulty === "easy") {
-    sentence = "I am going to school.";
-    meaning = "मैं स्कूल जा रहा हूँ।";
-    tip = "Simple present continuous sentence.";
-  }
+  const [resultData, setResultData] = useState<ResultData>({
+    score: 74,
+    listeningScore: 78,
+    speakingScore: 70,
+    repeatAccuracy: 72,
+    correction: stories[0].questions[0].answer,
+    mistake: "Try to speak the story in a complete sentence, not only one word.",
+    coachTip:
+      "Good listening. Now repeat one full sentence from the story slowly and clearly.",
+  });
 
-  if (mode.difficulty === "medium") {
-    sentence = "She is preparing for her exams.";
-    meaning = "She is getting ready for exams.";
-    tip = "Focus on verb usage.";
-  }
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const barOne = useRef(new Animated.Value(12)).current;
+  const barTwo = useRef(new Animated.Value(28)).current;
+  const barThree = useRef(new Animated.Value(18)).current;
+  const barFour = useRef(new Animated.Value(34)).current;
 
-  if (mode.difficulty === "hard") {
-    sentence = "He has been working tirelessly throughout the day.";
-    meaning = "";
-    tip = "Understand from context.";
-  }
+  const isRecording =
+    practiceState === "recording" || repeatState === "recording";
 
-  const speakSentence = async () => {
-    Speech.speak(sentence, {
+  useFocusEffect(
+    useCallback(() => {
+      const loadProfileAndSettings = async () => {
+        const savedProfile = await getProfile();
+        const savedSettings = await getSettings();
+
+        setProfile(savedProfile);
+        setSettings(savedSettings);
+      };
+
+      loadProfileAndSettings();
+    }, [])
+  );
+
+  useEffect(() => {
+    if (!isRecording) {
+      pulseAnim.setValue(1);
+      barOne.setValue(12);
+      barTwo.setValue(28);
+      barThree.setValue(18);
+      barFour.setValue(34);
+      return;
+    }
+
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.07,
+          duration: 520,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 520,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const waveLoop = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(barOne, {
+            toValue: 34,
+            duration: 420,
+            useNativeDriver: false,
+          }),
+          Animated.timing(barOne, {
+            toValue: 12,
+            duration: 420,
+            useNativeDriver: false,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(barTwo, {
+            toValue: 14,
+            duration: 470,
+            useNativeDriver: false,
+          }),
+          Animated.timing(barTwo, {
+            toValue: 30,
+            duration: 470,
+            useNativeDriver: false,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(barThree, {
+            toValue: 38,
+            duration: 390,
+            useNativeDriver: false,
+          }),
+          Animated.timing(barThree, {
+            toValue: 18,
+            duration: 390,
+            useNativeDriver: false,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(barFour, {
+            toValue: 16,
+            duration: 500,
+            useNativeDriver: false,
+          }),
+          Animated.timing(barFour, {
+            toValue: 34,
+            duration: 500,
+            useNativeDriver: false,
+          }),
+        ]),
+      ])
+    );
+
+    pulseLoop.start();
+    waveLoop.start();
+
+    return () => {
+      pulseLoop.stop();
+      waveLoop.stop();
+    };
+  }, [isRecording, pulseAnim, barOne, barTwo, barThree, barFour]);
+
+  const displayLanguage = getDisplayLanguage(profile, settings);
+
+  const speakText = (text: string) => {
+    if (!text.trim()) return;
+
+    Speech.stop();
+    Speech.speak(text, {
       language: "en-US",
-      rate: 0.9,
+      rate: 0.82,
     });
-    await updateAnalytics("reading", 8);
+  };
+
+  const getSummary = () => {
+    if (displayLanguage === "Bengali") return selectedStory.bengaliSummary;
+    if (displayLanguage === "Hindi") return selectedStory.hindiSummary;
+
+    return selectedStory.englishSummary;
+  };
+
+  const getKeywordMeaning = (item: KeyWord) => {
+    if (displayLanguage === "Bengali") return item.bengali;
+    if (displayLanguage === "Hindi") return item.hindi;
+
+    return item.english;
+  };
+
+  const keyWordsLine = selectedStory.keyWords
+    .map((item) => `${item.word} (${getKeywordMeaning(item)})`)
+    .join(", ");
+
+  const chooseStory = (story: StoryItem) => {
+    setSelectedStory(story);
+    setSelectedQuestionIndex(0);
+    setPracticeState("idle");
+    setRepeatState("idle");
+    setShowResultPopup(false);
+    setResultData({
+      score: 74,
+      listeningScore: 78,
+      speakingScore: 70,
+      repeatAccuracy: 72,
+      correction: story.questions[0].answer,
+      mistake:
+        "Try to speak the story in a complete sentence, not only one word.",
+      coachTip:
+        "Good listening. Now repeat one full sentence from the story slowly and clearly.",
+    });
+  };
+
+  const goNextQuestion = () => {
+    setSelectedQuestionIndex((prev) => {
+      if (prev >= selectedStory.questions.length - 1) return 0;
+      return prev + 1;
+    });
+    setPracticeState("idle");
+    setRepeatState("idle");
+    setShowResultPopup(false);
+  };
+
+  const goPreviousQuestion = () => {
+    setSelectedQuestionIndex((prev) => {
+      if (prev <= 0) return selectedStory.questions.length - 1;
+      return prev - 1;
+    });
+    setPracticeState("idle");
+    setRepeatState("idle");
+    setShowResultPopup(false);
+  };
+
+  const saveReadingListeningActivity = async (data: ResultData) => {
+    await addActivity({
+      type: "readingListening",
+      title: "Reading & Listening practice",
+      detail: `Listened and practiced: ${selectedStory.title}`,
+      score: data.score,
+      confidence: 62,
+      fluency: data.speakingScore,
+      mistake: data.mistake,
+      correctedSentence: data.correction,
+    });
+  };
+
+  const handleDynamicSpeaking = async () => {
+    if (repeatState === "recording") {
+      const repeatResult: ResultData = {
+        score: 82,
+        listeningScore: 82,
+        speakingScore: 78,
+        repeatAccuracy: 84,
+        correction: selectedQuestion.answer,
+        mistake:
+          "Repeat practice improved. Keep the sentence smooth and complete.",
+        coachTip:
+          "Nice. Repeating full answers helps you build listening memory and speaking fluency.",
+      };
+
+      setResultData(repeatResult);
+      setRepeatState("saved");
+      setShowResultPopup(true);
+      await saveReadingListeningActivity(repeatResult);
+      return;
+    }
+
+    if (repeatState === "saved") {
+      setRepeatState("idle");
+      setPracticeState("idle");
+      return;
+    }
+
+    if (practiceState === "idle") {
+      setPracticeState("recording");
+      return;
+    }
+
+    if (practiceState === "recording") {
+      const newResult: ResultData = {
+        score: 76,
+        listeningScore: 80,
+        speakingScore: 72,
+        repeatAccuracy: 74,
+        correction: selectedQuestion.answer,
+        mistake:
+          "Try to answer with a full sentence using words from the story.",
+        coachTip:
+          "Good attempt. Listen once more, then repeat the answer clearly.",
+      };
+
+      setResultData(newResult);
+      setPracticeState("checked");
+      setShowResultPopup(true);
+      await saveReadingListeningActivity(newResult);
+      return;
+    }
+
+    if (practiceState === "checked") {
+      setPracticeState("idle");
+      setRepeatState("recording");
+    }
+  };
+
+  const getDynamicButtonText = () => {
+    if (repeatState === "recording") return "Stop Repeat";
+    if (repeatState === "saved") return "Practice Again";
+    if (practiceState === "recording") return "Stop & Check";
+    if (practiceState === "checked") return "Repeat";
+    return "Speak";
+  };
+
+  const getDynamicButtonIcon = (): keyof typeof Ionicons.glyphMap => {
+    if (repeatState === "recording") return "stop";
+    if (repeatState === "saved") return "refresh-outline";
+    if (practiceState === "recording") return "stop";
+    if (practiceState === "checked") return "repeat-outline";
+    return "mic-outline";
   };
 
   return (
-    <View style={styles.container}>
-      <BackButton />
-      <Text style={styles.title}>Reading & Listening</Text>
+    <>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="arrow-back" size={22} color="#0F172A" />
+          </TouchableOpacity>
 
-      {/* Sentence */}
-      <Text style={styles.sentence}>{sentence}</Text>
+          <Text style={styles.headerTitle}>Reading & Listening</Text>
 
-      {/* 🔊 Play Audio */}
-      <TouchableOpacity style={styles.listenBtn} onPress={speakSentence}>
-        <Text style={styles.btnText}>🔊 Listen</Text>
-      </TouchableOpacity>
+          <View style={styles.emptyBox} />
+        </View>
 
-      {/* Meaning (only if allowed) */}
-      {mode.useNativeHelp && meaning !== "" && (
-        <Text style={styles.meaning}>{meaning}</Text>
-      )}
+        {/* Story List */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Stories List</Text>
+        </View>
 
-      {/* Tip */}
-      <Text style={styles.tip}>{tip}</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.storyTabs}
+        >
+          {stories.map((story) => {
+            const active = selectedStory.title === story.title;
 
-    </View>
+            return (
+              <TouchableOpacity
+                key={story.title}
+                style={[styles.storyTab, active && styles.storyTabActive]}
+                onPress={() => chooseStory(story)}
+                activeOpacity={0.85}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.storyTabTitle,
+                    active && styles.storyTabTitleActive,
+                  ]}
+                >
+                  {story.title}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* One Clean Story Card */}
+        <View style={styles.storyCard}>
+          <Text style={styles.storyTitle}>{selectedStory.title}</Text>
+
+          <View style={styles.storyImageBox}>
+            <Text style={styles.storyImageEmoji}>
+              {selectedStory.pictureEmoji}
+            </Text>
+            <Text style={styles.storyImageTitle}>
+              {selectedStory.pictureTitle}
+            </Text>
+          </View>
+
+          <Text style={styles.blockHeading}>Story:</Text>
+          <Text style={styles.storyText}>{selectedStory.story}</Text>
+
+          <Text style={styles.blockHeading}>Meaning:</Text>
+          <Text style={styles.meaningText}>{getSummary()}</Text>
+
+          <Text style={styles.blockHeading}>Key Words:</Text>
+          <Text style={styles.keyWordsText}>{keyWordsLine}</Text>
+
+          <View style={styles.questionLine}>
+            <View style={styles.questionHeaderRow}>
+              <Text style={styles.questionLabel}>
+                Question {selectedQuestionIndex + 1}/
+                {selectedStory.questions.length}
+              </Text>
+
+              <View style={styles.questionArrowRow}>
+                <TouchableOpacity
+                  style={styles.questionArrow}
+                  onPress={goPreviousQuestion}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={18}
+                    color={ACTION_COLOR}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.questionArrow}
+                  onPress={goNextQuestion}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={ACTION_COLOR}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <Text style={styles.questionText}>{selectedQuestion.question}</Text>
+          </View>
+
+          <View style={styles.recordingBox}>
+            <Animated.View
+              style={[
+                styles.micCircle,
+                isRecording && {
+                  backgroundColor: "#DC2626",
+                  borderColor: "#DC2626",
+                  transform: [{ scale: pulseAnim }],
+                },
+              ]}
+            >
+              <Ionicons
+                name={isRecording ? "radio-button-on" : "mic-outline"}
+                size={28}
+                color={isRecording ? "#FFFFFF" : ACTION_COLOR}
+              />
+            </Animated.View>
+
+            <View style={styles.waveBox}>
+              <Animated.View style={[styles.waveBar, { height: barOne }]} />
+              <Animated.View style={[styles.waveBar, { height: barTwo }]} />
+              <Animated.View style={[styles.waveBar, { height: barThree }]} />
+              <Animated.View style={[styles.waveBar, { height: barFour }]} />
+            </View>
+
+            <View style={styles.statusTextBox}>
+              <Text style={styles.statusTitle}>
+                {isRecording
+                  ? "Recording..."
+                  : repeatState === "saved"
+                  ? "Repeat saved"
+                  : practiceState === "checked"
+                  ? "Result ready"
+                  : "Ready"}
+              </Text>
+
+              <Text style={styles.statusText}>
+                {isRecording
+                  ? "Speak clearly using the story."
+                  : repeatState === "saved"
+                  ? "Repeat practice was saved to Progress."
+                  : practiceState === "checked"
+                  ? "Tap Repeat or open popup to see your result."
+                  : "Listen first, then answer the question."}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={styles.listenButton}
+              onPress={() => speakText(selectedStory.story)}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name="volume-high-outline"
+                size={18}
+                color={ACTION_COLOR}
+              />
+              <Text style={styles.listenButtonText}>Listening</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.speakButton,
+                isRecording && styles.recordingButton,
+              ]}
+              onPress={handleDynamicSpeaking}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name={getDynamicButtonIcon()}
+                size={18}
+                color="#FFFFFF"
+              />
+              <Text style={styles.speakButtonText}>
+                {getDynamicButtonText()}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {practiceState === "checked" && (
+            <TouchableOpacity
+              style={styles.openResultButton}
+              onPress={() => setShowResultPopup(true)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="expand-outline" size={18} color={ACTION_COLOR} />
+              <Text style={styles.openResultText}>Open Results</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Results Popup */}
+      <Modal
+        visible={showResultPopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowResultPopup(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalIcon}>
+                <Ionicons
+                  name="sparkles-outline"
+                  size={23}
+                  color={ACTION_COLOR}
+                />
+              </View>
+
+              <View style={styles.modalTitleBox}>
+                <Text style={styles.modalLabel}>Results</Text>
+                <Text style={styles.modalTitle}>
+                  Reading & Listening feedback
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowResultPopup(false)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="close" size={21} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.scoreRow}>
+                <View style={styles.scoreBox}>
+                  <Text style={styles.scoreValue}>{resultData.score}%</Text>
+                  <Text style={styles.scoreLabel}>Overall</Text>
+                </View>
+
+                <View style={styles.scoreBox}>
+                  <Text style={styles.scoreValue}>
+                    {resultData.listeningScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Listening</Text>
+                </View>
+
+                <View style={styles.scoreBox}>
+                  <Text style={styles.scoreValue}>
+                    {resultData.speakingScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Speaking</Text>
+                </View>
+              </View>
+
+              <View style={styles.resultBox}>
+                <Text style={styles.resultLabel}>Correct Answer</Text>
+                <Text style={styles.resultText}>{selectedQuestion.answer}</Text>
+
+                <TouchableOpacity
+                  style={styles.modalSmallButton}
+                  onPress={() => speakText(selectedQuestion.answer)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="volume-high-outline"
+                    size={17}
+                    color={ACTION_COLOR}
+                  />
+                  <Text style={styles.modalSmallButtonText}>Listen</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.mistakeBox}>
+                <Text style={styles.mistakeTitle}>Mistake / Focus</Text>
+                <Text style={styles.mistakeText}>{resultData.mistake}</Text>
+              </View>
+
+              <View style={styles.repeatAccuracyBox}>
+                <Text style={styles.repeatAccuracyLabel}>Repeat Accuracy</Text>
+                <Text style={styles.repeatAccuracyValue}>
+                  {resultData.repeatAccuracy}%
+                </Text>
+              </View>
+
+              <View style={styles.coachBox}>
+                <Text style={styles.coachTitle}>Coach Tip</Text>
+                <Text style={styles.coachText}>{resultData.coachTip}</Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActionRow}>
+              <TouchableOpacity
+                style={styles.modalLightButton}
+                onPress={() => speakText(selectedStory.story)}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="volume-high-outline"
+                  size={18}
+                  color={ACTION_COLOR}
+                />
+                <Text style={styles.modalLightButtonText}>Listen</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalPrimaryButton}
+                onPress={() => {
+                  setShowResultPopup(false);
+                  setRepeatState("recording");
+                  setPracticeState("idle");
+                }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="repeat-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.modalPrimaryButtonText}>Repeat</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+
+  content: {
+    padding: 18,
+    paddingBottom: 110,
+  },
+
+  header: {
+    marginTop: 8,
+    marginBottom: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
 
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-
-  sentence: {
+  headerTitle: {
     fontSize: 20,
-    textAlign: "center",
-    marginBottom: 20,
+    fontWeight: "900",
+    color: "#0F172A",
   },
 
-  listenBtn: {
-    backgroundColor: "black",
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 20,
+  emptyBox: {
+    width: 42,
+    height: 42,
   },
 
-  btnText: {
-    color: "white",
-    fontSize: 16,
+  sectionHeader: {
+    marginBottom: 12,
   },
 
-  meaning: {
+  sectionTitle: {
     fontSize: 18,
-    color: "green",
-    marginBottom: 10,
-    textAlign: "center",
+    fontWeight: "900",
+    color: "#0F172A",
   },
 
-  tip: {
+  storyTabs: {
+    gap: 10,
+    paddingRight: 18,
+    marginBottom: 18,
+  },
+
+  storyTab: {
+    width: 190,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  storyTabActive: {
+    backgroundColor: "#EEF2FF",
+    borderColor: "#C7D2FE",
+  },
+
+  storyTabTitle: {
     fontSize: 14,
-    color: "#555",
-    textAlign: "center",
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+
+  storyTabTitleActive: {
+    color: ACTION_COLOR,
+  },
+
+  storyCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  storyTitle: {
+    fontSize: 24,
+    lineHeight: 31,
+    color: "#0F172A",
+    fontWeight: "900",
+    marginBottom: 14,
+  },
+
+  storyImageBox: {
+    height: 150,
+    borderRadius: 22,
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+
+  storyImageEmoji: {
+    fontSize: 52,
+    marginBottom: 8,
+  },
+
+  storyImageTitle: {
+    fontSize: 15,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+  },
+
+  blockHeading: {
+    fontSize: 15,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+    marginTop: 12,
+    marginBottom: 6,
+  },
+
+  storyText: {
+    fontSize: 16,
+    lineHeight: 25,
+    color: "#334155",
+    fontWeight: "700",
+  },
+
+  meaningText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#334155",
+    fontWeight: "800",
+  },
+
+  keyWordsText: {
+    fontSize: 13,
+    lineHeight: 21,
+    color: "#334155",
+    fontWeight: "700",
+  },
+
+  questionLine: {
+    marginTop: 14,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  questionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 7,
+  },
+
+  questionLabel: {
+    fontSize: 12,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+  },
+
+  questionArrowRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  questionArrow: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  questionText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#0F172A",
+    fontWeight: "900",
+  },
+
+  recordingBox: {
+    marginTop: 16,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  micCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+
+  waveBox: {
+    height: 38,
+    width: 92,
+    borderRadius: 15,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginRight: 10,
+  },
+
+  waveBar: {
+    width: 7,
+    borderRadius: 999,
+    backgroundColor: "#DC2626",
+  },
+
+  statusTextBox: {
+    flex: 1,
+  },
+
+  statusTitle: {
+    fontSize: 14,
+    color: "#0F172A",
+    fontWeight: "900",
+    marginBottom: 3,
+  },
+
+  statusText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#64748B",
+    fontWeight: "600",
+  },
+
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 15,
+  },
+
+  listenButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+
+  listenButtonText: {
+    color: ACTION_COLOR,
+    fontSize: 14,
+    fontWeight: "900",
+    marginLeft: 7,
+  },
+
+  speakButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: ACTION_COLOR,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+
+  recordingButton: {
+    backgroundColor: "#DC2626",
+  },
+
+  speakButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "900",
+    marginLeft: 7,
+  },
+
+  openResultButton: {
+    marginTop: 10,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+
+  openResultText: {
+    marginLeft: 7,
+    fontSize: 14,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    padding: 18,
+  },
+
+  modalCard: {
+    maxHeight: "88%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 26,
+    padding: 18,
+  },
+
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+
+  modalIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  modalTitleBox: {
+    flex: 1,
+  },
+
+  modalLabel: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "900",
+    marginBottom: 3,
+  },
+
+  modalTitle: {
+    fontSize: 18,
+    color: "#0F172A",
+    fontWeight: "900",
+  },
+
+  modalCloseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  modalScroll: {
+    maxHeight: 460,
+  },
+
+  scoreRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  scoreBox: {
+    flex: 1,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 16,
+    padding: 12,
+    alignItems: "center",
+  },
+
+  scoreValue: {
+    fontSize: 18,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+
+  scoreLabel: {
+    fontSize: 11,
+    color: "#334155",
+    fontWeight: "900",
+  },
+
+  resultBox: {
+    backgroundColor: "#ECFDF5",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    marginBottom: 10,
+  },
+
+  resultLabel: {
+    fontSize: 12,
+    color: "#166534",
+    fontWeight: "900",
+    marginBottom: 5,
+  },
+
+  resultText: {
+    fontSize: 16,
+    lineHeight: 23,
+    color: "#166534",
+    fontWeight: "900",
+  },
+
+  modalSmallButton: {
+    marginTop: 9,
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  modalSmallButtonText: {
+    marginLeft: 5,
+    fontSize: 12,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+  },
+
+  mistakeBox: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    marginBottom: 10,
+  },
+
+  mistakeTitle: {
+    fontSize: 13,
+    color: "#991B1B",
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+
+  mistakeText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#991B1B",
+    fontWeight: "700",
+  },
+
+  repeatAccuracyBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+
+  repeatAccuracyLabel: {
+    fontSize: 13,
+    color: "#334155",
+    fontWeight: "900",
+  },
+
+  repeatAccuracyValue: {
+    fontSize: 14,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+  },
+
+  coachBox: {
+    backgroundColor: "#EEF2FF",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+    marginBottom: 4,
+  },
+
+  coachTitle: {
+    fontSize: 14,
+    color: "#0F172A",
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+
+  coachText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#334155",
+    fontWeight: "700",
+  },
+
+  modalActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+
+  modalLightButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+
+  modalLightButtonText: {
+    marginLeft: 7,
+    fontSize: 14,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+  },
+
+  modalPrimaryButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: ACTION_COLOR,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+
+  modalPrimaryButtonText: {
+    marginLeft: 7,
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "900",
   },
 });

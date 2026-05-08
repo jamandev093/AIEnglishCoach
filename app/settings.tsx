@@ -1,266 +1,535 @@
+import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Switch,
   Alert,
+  ScrollView,
   Share,
-  Linking,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useState, useEffect } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import BackButton from "../src/components/BackButton";
-import { MaterialIcons } from "@expo/vector-icons";
 
-const languages = [
-  "Hindi",
-  "Bengali (India)",
-  "Marathi",
-  "Tamil",
-  "Telugu",
-  "Urdu (India)",
-  "Gujarati",
-];
+import {
+  AppSettings,
+  defaultSettings,
+  getSettings,
+  resetSettings,
+  updateSettings,
+} from "../src/utils/settingsStore";
+
+import { clearActivityHistory } from "../src/utils/activityHistory";
+
+const ACTION_COLOR = "#8499DC";
 
 export default function SettingsScreen() {
-  const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
-  const [nativeLang, setNativeLang] = useState("Hindi");
-  const [showLangList, setShowLangList] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      const loadSettings = async () => {
+        const savedSettings = await getSettings();
+        setSettings(savedSettings);
+      };
 
-  const loadSettings = async () => {
-    const notif = await AsyncStorage.getItem("notifications");
-    const theme = await AsyncStorage.getItem("darkMode");
-    const lang = await AsyncStorage.getItem("nativeLang");
+      loadSettings();
+    }, [])
+  );
 
-    if (notif) setNotifications(JSON.parse(notif));
-    if (theme) setDarkMode(JSON.parse(theme));
-    if (lang) setNativeLang(lang);
+  const updateOneSetting = async (updates: Partial<AppSettings>) => {
+    const updatedSettings = await updateSettings(updates);
+    setSettings(updatedSettings);
   };
 
-  const saveSettings = async () => {
-    await AsyncStorage.setItem("notifications", JSON.stringify(notifications));
-    await AsyncStorage.setItem("darkMode", JSON.stringify(darkMode));
-    await AsyncStorage.setItem("nativeLang", nativeLang);
-
-    Alert.alert("Saved", "Settings updated");
-  };
-
-  const resetProgress = async () => {
-    await AsyncStorage.removeItem("analytics");
-    Alert.alert("Reset", "Progress cleared");
-  };
-
-  const shareApp = async () => {
+  const handleShareApp = async () => {
     await Share.share({
-      message: "Try this AI English Coach app!",
+      message:
+        "Try AI English Coach — practice English speaking, grammar, pronunciation, and confidence.",
     });
   };
 
-  const openSettings = () => {
-    Linking.openSettings();
+  const handleResetProgress = () => {
+    Alert.alert(
+      "Reset progress?",
+      "This will clear your local activity history from this device.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            await clearActivityHistory();
+            Alert.alert("Progress reset", "Your local progress was cleared.");
+          },
+        },
+      ]
+    );
   };
 
-  const deleteAccount = () => {
-    Alert.alert("Delete Account", "Are you sure?", [
-      { text: "Cancel" },
-      {
-        text: "Delete",
-        onPress: async () => {
-          await AsyncStorage.clear();
-          Alert.alert("Deleted");
+  const handleResetSettings = () => {
+    Alert.alert(
+      "Reset settings?",
+      "This will restore all settings to default.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
         },
-      },
-    ]);
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            const updatedSettings = await resetSettings();
+            setSettings(updatedSettings);
+            Alert.alert("Settings reset", "Settings restored to default.");
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Coming soon", "Logout will be connected after account system.");
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Coming soon",
+      "Delete account will be connected after real user account backend."
+    );
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <BackButton />
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color="#0F172A" />
+        </TouchableOpacity>
 
-      <View style={styles.container}>
+        <Text style={styles.headerTitle}>Settings</Text>
 
-        <Text style={styles.title}>Settings</Text>
+        <View style={styles.emptyBox} />
+      </View>
 
-        {/* 🔔 Notifications */}
-        <View style={styles.card}>
-          <Text style={styles.label}>Notifications</Text>
+      {/* App Display */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <View style={styles.cardIcon}>
+            <Ionicons
+              name="color-palette-outline"
+              size={22}
+              color={ACTION_COLOR}
+            />
+          </View>
+
+          <View style={styles.cardTitleBox}>
+            <Text style={styles.cardTitle}>App Display</Text>
+            <Text style={styles.cardSubtitle}>
+              Control app language and display style.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.fixedLanguageBox}>
+          <View style={styles.fixedLanguageIcon}>
+            <Ionicons name="language-outline" size={20} color={ACTION_COLOR} />
+          </View>
+
+          <View style={styles.fixedLanguageTextBox}>
+            <Text style={styles.settingTitle}>App Language</Text>
+            <Text style={styles.settingSubtitle}>
+              App interface stays English for global consistency.
+            </Text>
+          </View>
+
+          <View style={styles.englishPill}>
+            <Text style={styles.englishPillText}>English</Text>
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.settingRow}>
+          <View style={styles.settingTextBox}>
+            <Text style={styles.settingTitle}>Dark Mode</Text>
+            <Text style={styles.settingSubtitle}>
+              UI support will be completed later.
+            </Text>
+          </View>
+
           <Switch
-            value={notifications}
-            onValueChange={setNotifications}
+            value={settings.darkModeEnabled}
+            onValueChange={(value) =>
+              updateOneSetting({ darkModeEnabled: value })
+            }
+            trackColor={{ false: "#CBD5E1", true: "#C7D2FE" }}
+            thumbColor={settings.darkModeEnabled ? ACTION_COLOR : "#F8FAFC"}
+          />
+        </View>
+      </View>
+
+      {/* Practice Controls */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <View style={styles.cardIcon}>
+            <Ionicons name="options-outline" size={22} color={ACTION_COLOR} />
+          </View>
+
+          <View style={styles.cardTitleBox}>
+            <Text style={styles.cardTitle}>Practice Controls</Text>
+            <Text style={styles.cardSubtitle}>
+              These settings control app behavior globally.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.settingRow}>
+          <View style={styles.settingTextBox}>
+            <Text style={styles.settingTitle}>Daily Reminder</Text>
+            <Text style={styles.settingSubtitle}>
+              Remind me to practice speaking every day.
+            </Text>
+          </View>
+
+          <Switch
+            value={settings.dailyReminderEnabled}
+            onValueChange={(value) =>
+              updateOneSetting({ dailyReminderEnabled: value })
+            }
+            trackColor={{ false: "#CBD5E1", true: "#C7D2FE" }}
+            thumbColor={
+              settings.dailyReminderEnabled ? ACTION_COLOR : "#F8FAFC"
+            }
           />
         </View>
 
-        {/* 🌐 Language */}
-        <View style={styles.card}>
-          <Text style={styles.label}>Language</Text>
+        <View style={styles.divider} />
 
-          <Text style={styles.fixedLang}>✔ English (Default)</Text>
+        <View style={styles.settingRow}>
+          <View style={styles.settingTextBox}>
+            <Text style={styles.settingTitle}>Notifications</Text>
+            <Text style={styles.settingSubtitle}>
+              Allow progress and practice reminders.
+            </Text>
+          </View>
 
-          <TouchableOpacity
-            style={styles.selectBox}
-            onPress={() => setShowLangList(!showLangList)}
-          >
-            <Text>{nativeLang}</Text>
-          </TouchableOpacity>
-
-          {showLangList && (
-            <View style={styles.langList}>
-              {languages.map((item) => (
-                <TouchableOpacity
-                  key={item}
-                  style={styles.langItem}
-                  onPress={() => {
-                    setNativeLang(item);
-                    setShowLangList(false);
-                  }}
-                >
-                  <Text>{item}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+          <Switch
+            value={settings.notificationsEnabled}
+            onValueChange={(value) =>
+              updateOneSetting({ notificationsEnabled: value })
+            }
+            trackColor={{ false: "#CBD5E1", true: "#C7D2FE" }}
+            thumbColor={
+              settings.notificationsEnabled ? ACTION_COLOR : "#F8FAFC"
+            }
+          />
         </View>
 
-        {/* 🌙 Dark Mode */}
-        <View style={styles.card}>
-          <Text style={styles.label}>Dark Mode</Text>
-          <Switch value={darkMode} onValueChange={setDarkMode} />
+        <View style={styles.divider} />
+
+        <View style={styles.settingRow}>
+          <View style={styles.settingTextBox}>
+            <Text style={styles.settingTitle}>Mic & Bluetooth</Text>
+            <Text style={styles.settingSubtitle}>
+              Prepare speaking practice for mic and headset support.
+            </Text>
+          </View>
+
+          <Switch
+            value={settings.micBluetoothEnabled}
+            onValueChange={(value) =>
+              updateOneSetting({ micBluetoothEnabled: value })
+            }
+            trackColor={{ false: "#CBD5E1", true: "#C7D2FE" }}
+            thumbColor={settings.micBluetoothEnabled ? ACTION_COLOR : "#F8FAFC"}
+          />
         </View>
-
-        {/* 🔐 Permissions */}
-        <TouchableOpacity style={styles.actionCard} onPress={openSettings}>
-          <MaterialIcons name="security" size={20} />
-          <Text style={styles.actionText}>Enable Mic & Bluetooth</Text>
-        </TouchableOpacity>
-
-        {/* 💾 Save */}
-        <TouchableOpacity style={styles.saveBtn} onPress={saveSettings}>
-          <Text style={styles.saveText}>Save Settings</Text>
-        </TouchableOpacity>
-
-        {/* 🔁 Reset */}
-        <TouchableOpacity style={styles.actionCard} onPress={resetProgress}>
-          <MaterialIcons name="refresh" size={20} />
-          <Text style={styles.actionText}>Reset Progress</Text>
-        </TouchableOpacity>
-
-        {/* 📤 Share */}
-        <TouchableOpacity style={styles.actionCard} onPress={shareApp}>
-          <MaterialIcons name="share" size={20} />
-          <Text style={styles.actionText}>Share App</Text>
-        </TouchableOpacity>
-
-        {/* 🚪 Logout */}
-        <TouchableOpacity style={styles.actionCard}>
-          <MaterialIcons name="logout" size={20} />
-          <Text style={styles.actionText}>Logout</Text>
-        </TouchableOpacity>
-
-        {/* ❌ Delete */}
-        <TouchableOpacity style={styles.deleteCard} onPress={deleteAccount}>
-          <MaterialIcons name="delete" size={20} color="red" />
-          <Text style={styles.deleteText}>Delete Account</Text>
-        </TouchableOpacity>
-
       </View>
-    </View>
+
+      {/* App Actions */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <View style={styles.cardIcon}>
+            <Ionicons name="settings-outline" size={22} color={ACTION_COLOR} />
+          </View>
+
+          <View style={styles.cardTitleBox}>
+            <Text style={styles.cardTitle}>App Actions</Text>
+            <Text style={styles.cardSubtitle}>
+              Manage progress, sharing, and account actions.
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={handleResetProgress}
+          activeOpacity={0.85}
+        >
+          <View style={styles.actionIcon}>
+            <Ionicons name="refresh-outline" size={21} color={ACTION_COLOR} />
+          </View>
+
+          <Text style={styles.actionText}>Reset Progress</Text>
+
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={handleShareApp}
+          activeOpacity={0.85}
+        >
+          <View style={styles.actionIcon}>
+            <Ionicons name="share-social-outline" size={21} color={ACTION_COLOR} />
+          </View>
+
+          <Text style={styles.actionText}>Share App</Text>
+
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={handleResetSettings}
+          activeOpacity={0.85}
+        >
+          <View style={styles.actionIcon}>
+            <Ionicons name="reload-outline" size={21} color={ACTION_COLOR} />
+          </View>
+
+          <Text style={styles.actionText}>Reset Settings</Text>
+
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={handleLogout}
+          activeOpacity={0.85}
+        >
+          <View style={styles.actionIcon}>
+            <Ionicons name="log-out-outline" size={21} color={ACTION_COLOR} />
+          </View>
+
+          <Text style={styles.actionText}>Logout</Text>
+
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Delete Account */}
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={handleDeleteAccount}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="trash-outline" size={20} color="#DC2626" />
+        <Text style={styles.deleteButtonText}>Delete Account</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    padding: 20,
+    backgroundColor: "#F8FAFC",
   },
 
-  title: {
+  content: {
+    padding: 18,
+    paddingBottom: 110,
+  },
+
+  header: {
+    marginTop: 8,
+    marginBottom: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  headerTitle: {
     fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+
+  emptyBox: {
+    width: 42,
+    height: 42,
   },
 
   card: {
-    backgroundColor: "#f5f5f5",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 18,
+  },
+
+  cardHeaderRow: {
     flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  cardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  cardTitleBox: {
+    flex: 1,
+  },
+
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+
+  cardSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
   },
 
-  label: {
+  settingTextBox: {
+    flex: 1,
+    paddingRight: 14,
+  },
+
+  settingTitle: {
     fontSize: 15,
+    color: "#0F172A",
+    fontWeight: "900",
+    marginBottom: 5,
   },
 
-  fixedLang: {
-    marginTop: 5,
-    color: "#777",
+  settingSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+    fontWeight: "600",
   },
 
-  selectBox: {
-    marginTop: 10,
-    padding: 10,
-    backgroundColor: "#eee",
-    borderRadius: 6,
+  divider: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginVertical: 15,
   },
 
-  langList: {
-    marginTop: 10,
-    backgroundColor: "#fff",
-    borderRadius: 6,
-    padding: 5,
-  },
-
-  langItem: {
-    padding: 8,
-  },
-
-  actionCard: {
+  fixedLanguageBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: "#f3f3f3",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
+  },
+
+  fixedLanguageIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  fixedLanguageTextBox: {
+    flex: 1,
+    paddingRight: 10,
+  },
+
+  englishPill: {
+    backgroundColor: "#EEF2FF",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+
+  englishPillText: {
+    color: ACTION_COLOR,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  actionItem: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+
+  actionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
 
   actionText: {
+    flex: 1,
     fontSize: 15,
+    fontWeight: "900",
+    color: "#0F172A",
   },
 
-  deleteCard: {
+  deleteButton: {
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    alignItems: "center",
+    justifyContent: "center",
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#ffe5e5",
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 10,
+    marginBottom: 24,
   },
 
-  deleteText: {
-    color: "red",
-    fontWeight: "bold",
-  },
-
-  saveBtn: {
-    backgroundColor: "#000",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 15,
-  },
-
-  saveText: {
-    color: "#fff",
+  deleteButtonText: {
+    marginLeft: 8,
+    color: "#DC2626",
+    fontSize: 15,
+    fontWeight: "900",
   },
 });

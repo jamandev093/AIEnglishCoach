@@ -1,104 +1,95 @@
-import { Tabs, useRouter } from "expo-router";
-import { MaterialIcons } from "@expo/vector-icons";
-import { TouchableOpacity, Image } from "react-native";
-import { useEffect, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  subscribeProfileUpdate,
-  unsubscribeProfileUpdate,
-} from "../../src/utils/eventBus";
-export default function TabLayout() {
-  const router = useRouter();
-  const [profileImage, setProfileImage] = useState("");
+import { Ionicons } from "@expo/vector-icons";
+import { Tabs, router } from "expo-router";
+import React from "react";
+import { StyleSheet, TouchableOpacity } from "react-native";
 
-  useEffect(() => {
-  loadProfile();
+import ProfileHeaderButton from "../../src/components/ProfileHeaderButton";
 
-  const refresh = () => loadProfile();
+const ACTION_COLOR = "#8499DC";
 
-  subscribeProfileUpdate(refresh);
-
-  return () => {
-    unsubscribeProfileUpdate(refresh);
-  };
-}, []);
-
-  const loadProfile = async () => {
-    const img = await AsyncStorage.getItem("profileImage");
-    if (img) setProfileImage(img);
-    else setProfileImage("");
-  };
-
+export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#2a9d8f",
+        headerTitle: "AI English Coach",
         headerTitleAlign: "center",
-
-        // 🔥 PROFILE (LEFT)
-        headerLeft: () => (
-          <TouchableOpacity
-            onPress={() => router.push("/profile")}
-            style={{ marginLeft: 15 }}
-          >
-            {profileImage ? (
-              <Image
-                source={{ uri: profileImage }}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 20,
-                }}
-              />
-            ) : (
-              <MaterialIcons name="account-circle" size={30} color="#000" />
-            )}
-          </TouchableOpacity>
-        ),
-
-        // 🔥 SETTINGS (RIGHT)
+        headerTitleStyle: {
+          fontSize: 18,
+          fontWeight: "900",
+          color: "#0F172A",
+        },
+        headerStyle: {
+          backgroundColor: "#FFFFFF",
+        },
+        headerShadowVisible: false,
+        headerLeft: () => <ProfileHeaderButton />,
         headerRight: () => (
           <TouchableOpacity
-            onPress={() => router.push("/settings")}
-            style={{ marginRight: 15 }}
+            style={styles.settingsButton}
+            onPress={() => router.push("/settings" as any)}
+            activeOpacity={0.85}
           >
-            <MaterialIcons name="settings" size={26} color="#000" />
+            <Ionicons name="settings-outline" size={22} color="#0F172A" />
           </TouchableOpacity>
         ),
+        tabBarActiveTintColor: ACTION_COLOR,
+        tabBarInactiveTintColor: "#94A3B8",
+        tabBarStyle: {
+          height: 64,
+          paddingBottom: 8,
+          paddingTop: 8,
+          backgroundColor: "#FFFFFF",
+          borderTopColor: "#E5E7EB",
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: "800",
+        },
       }}
     >
-      {/* 🏠 Home */}
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="home" size={24} color={color} />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" size={size} color={color} />
           ),
         }}
       />
 
-      {/* 🎤 Speaking */}
       <Tabs.Screen
         name="speaking"
         options={{
           title: "Speaking",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="keyboard-voice" size={24} color={color} />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="mic-outline" size={size} color={color} />
           ),
         }}
       />
 
-      {/* 📊 Progress */}
       <Tabs.Screen
         name="progress"
         options={{
           title: "Progress",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="bar-chart" size={24} color={color} />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="analytics-outline" size={size} color={color} />
           ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  settingsButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 14,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+});
