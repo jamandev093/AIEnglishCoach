@@ -32,6 +32,8 @@ import {
   getLanguageModeLabel,
 } from "../src/utils/languageMode";
 
+import { analyzeSentenceWithBackend } from "../src/config/api";
+
 type CoachMode = "Easy Mode" | "Teaching Mode";
 type RepeatState = "idle" | "recording" | "done";
 
@@ -278,26 +280,87 @@ export default function GrammarCoachScreen() {
     return explanation.english;
   };
 
-  const analyzeSentence = async () => {
-    const clean = userSentence.trim().toLowerCase();
+ const analyzeSentence = async () => {
+  const cleanSentence = userSentence.trim();
 
-    const found =
-      demoResults.find((item) => item.input.toLowerCase() === clean) ||
-      demoResults[0];
+  if (!cleanSentence) {
+    return;
+  }
 
-    setResult(found);
+  try {
+    const backendResult = await analyzeSentenceWithBackend(cleanSentence);
+
+    const mappedResult: GrammarResult = {
+      input: backendResult.originalText || cleanSentence,
+      corrected:
+        backendResult.correctedText ||
+        backendResult.improved ||
+        cleanSentence,
+      score: backendResult.score || 0,
+      mistakes:
+        backendResult.mistakes && backendResult.mistakes.length > 0
+          ? backendResult.mistakes
+          : ["No major mistake found"],
+      easyExplanation: {
+        english:
+          backendResult.simpleExplanation ||
+          "Your sentence is understandable.",
+        hindi:
+          backendResult.simpleExplanation ||
+          "आपका वाक्य समझ में आता है।",
+        bengali:
+          backendResult.simpleExplanation ||
+          "আপনার বাক্যটি বোঝা যাচ্ছে।",
+      },
+      teacherExplanation: {
+        english:
+          backendResult.teacherExplanation ||
+          backendResult.simpleExplanation ||
+          "The backend checked your sentence.",
+        hindi:
+          backendResult.teacherExplanation ||
+          backendResult.simpleExplanation ||
+          "Backend ने आपका sentence check किया।",
+        bengali:
+          backendResult.teacherExplanation ||
+          backendResult.simpleExplanation ||
+          "Backend আপনার sentence check করেছে।",
+      },
+      pattern:
+        backendResult.repeatSentence ||
+        backendResult.correctedText ||
+        "Repeat the corrected sentence.",
+      repeatTask:
+        backendResult.smartSuggestion ||
+        backendResult.coachReply ||
+        "Repeat the corrected sentence slowly and clearly.",
+    };
+
+    setResult(mappedResult);
     setRepeatState("idle");
     setShowResultModal(true);
 
     await addActivity({
       type: "grammar",
       title: "Grammar correction",
-      detail: `Fixed: ${found.input} → ${found.corrected}`,
-      score: found.score,
-      mistake: found.mistakes.join(", "),
-      correctedSentence: found.corrected,
+      detail: `Fixed: ${mappedResult.input} → ${mappedResult.corrected}`,
+      score: mappedResult.score,
+      mistake: mappedResult.mistakes.join(", "),
+      correctedSentence: mappedResult.corrected,
     });
-  };
+  } catch (error) {
+    console.log("Grammar backend error:", error);
+
+    const fallback =
+      demoResults.find(
+        (item) => item.input.toLowerCase() === cleanSentence.toLowerCase()
+      ) || demoResults[0];
+
+    setResult(fallback);
+    setRepeatState("idle");
+    setShowResultModal(true);
+  }
+};
 
   const chooseDemo = (item: GrammarResult) => {
     setUserSentence(item.input);

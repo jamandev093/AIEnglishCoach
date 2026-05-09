@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 
+import { analyzeSentenceWithBackend } from "../config/api";
 import { addActivity } from "../utils/activityHistory";
 
 import {
@@ -49,6 +50,17 @@ type SentenceTask = {
 
 type CheckResult = "idle" | "correct" | "wrong";
 type RepeatState = "idle" | "recording" | "saved";
+
+type BackendSentenceResult = {
+  originalText: string;
+  correctedText: string;
+  score: number;
+  mistakes: string[];
+  simpleExplanation: string;
+  teacherExplanation: string;
+  smartSuggestion: string;
+  repeatSentence: string;
+};
 
 const ACTION_COLOR = "#8499DC";
 const RECORDING_COLOR = "#DC2626";
@@ -107,6 +119,8 @@ export default function SentenceBuildingScreen() {
   const [result, setResult] = useState<CheckResult>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
+  const [backendResult, setBackendResult] =
+    useState<BackendSentenceResult | null>(null);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(12)).current;
@@ -224,7 +238,31 @@ export default function SentenceBuildingScreen() {
 
   const builtSentence = typedSentence.trim();
   const isCorrect = result === "correct";
-  const resultScore = isCorrect ? 90 : 55;
+
+  const popupCorrectSentence =
+    backendResult?.correctedText || selectedTask.correctSentence;
+
+  const popupScore = backendResult?.score ?? (isCorrect ? 90 : 55);
+
+  const popupMistakes =
+    backendResult?.mistakes && backendResult.mistakes.length > 0
+      ? backendResult.mistakes
+      : isCorrect
+      ? ["No major mistake found"]
+      : ["Word order / sentence pattern"];
+
+  const popupCorrection = backendResult?.simpleExplanation || selectedTask.simpleRule;
+
+  const popupTeacherExplanation =
+    backendResult?.teacherExplanation || selectedTask.teacherExplanation;
+
+  const popupSmartSuggestion =
+    backendResult?.smartSuggestion || selectedTask.smartSuggestion;
+
+  const popupRepeatSentence =
+    backendResult?.repeatSentence ||
+    backendResult?.correctedText ||
+    selectedTask.correctSentence;
 
   const getTaskMeaning = () => {
     if (displayLanguage === "Bengali") return selectedTask.meaningBengali;
@@ -269,6 +307,7 @@ export default function SentenceBuildingScreen() {
     setResult("idle");
     setShowResultPopup(false);
     setRepeatState("idle");
+    setBackendResult(null);
   };
 
   const appendSuggestionWord = (word: string) => {
@@ -281,6 +320,7 @@ export default function SentenceBuildingScreen() {
 
     setResult("idle");
     setRepeatState("idle");
+    setBackendResult(null);
   };
 
   const removeLastWord = () => {
@@ -289,6 +329,7 @@ export default function SentenceBuildingScreen() {
     setTypedSentence(parts.join(" "));
     setResult("idle");
     setRepeatState("idle");
+    setBackendResult(null);
   };
 
   const resetTask = () => {
@@ -297,6 +338,7 @@ export default function SentenceBuildingScreen() {
     setResult("idle");
     setShowResultPopup(false);
     setRepeatState("idle");
+    setBackendResult(null);
   };
 
   const cleanSentence = (text: string) => {
@@ -312,15 +354,67 @@ export default function SentenceBuildingScreen() {
     const cleanCorrect = cleanSentence(selectedTask.correctSentence);
 
     if (!cleanBuilt) {
-      Alert.alert("Build sentence", "Type or tap words to build a sentence first.");
+      Alert.alert(
+        "Build sentence",
+        "Type or tap words to build a sentence first."
+      );
       return;
     }
 
-    if (cleanBuilt === cleanCorrect) {
-      setResult("correct");
+    try {
+      const apiResult = await analyzeSentenceWithBackend(builtSentence);
+
+      const mappedBackendResult: BackendSentenceResult = {
+        originalText: apiResult.originalText || builtSentence,
+        correctedText:
+          apiResult.correctedText ||
+          apiResult.improved ||
+          selectedTask.correctSentence,
+        score: apiResult.score || 0,
+        mistakes:
+          apiResult.mistakes && apiResult.mistakes.length > 0
+            ? apiResult.mistakes
+            : ["No major mistake found"],
+        simpleExplanation: apiResult.simpleExplanation || selectedTask.simpleRule,
+        teacherExplanation:
+          apiResult.teacherExplanation || selectedTask.teacherExplanation,
+        smartSuggestion: apiResult.smartSuggestion || selectedTask.smartSuggestion,
+        repeatSentence:
+          apiResult.repeatSentence ||
+          apiResult.correctedText ||
+          selectedTask.correctSentence,
+      };
+
+      setBackendResult(mappedBackendResult);
+
+      const cleanBackendCorrection = cleanSentence(mappedBackendResult.correctedText);
+
+      const sentenceIsCorrect =
+        cleanBuilt === cleanCorrect || cleanBuilt === cleanBackendCorrection;
+
+      setResult(sentenceIsCorrect ? "correct" : "wrong");
       setShowResultPopup(true);
 
-      try {
+      await addActivity({
+        type: "sentenceBuilding",
+        title: sentenceIsCorrect
+          ? "Sentence building"
+          : "Sentence building correction",
+        detail: `Tried: ${builtSentence} → Correct: ${mappedBackendResult.correctedText}`,
+        score: mappedBackendResult.score,
+        confidence: sentenceIsCorrect ? 72 : 62,
+        fluency: sentenceIsCorrect ? 70 : 60,
+        mistake: mappedBackendResult.mistakes.join(", "),
+        correctedSentence: mappedBackendResult.correctedText,
+      });
+    } catch (error) {
+      console.log("Sentence backend error:", error);
+
+      if (cleanBuilt === cleanCorrect) {
+        setBackendResult(null);
+        setResult("correct");
+        setShowResultPopup(true);
+
         await addActivity({
           type: "sentenceBuilding",
           title: "Sentence building",
@@ -330,17 +424,14 @@ export default function SentenceBuildingScreen() {
           fluency: 68,
           correctedSentence: selectedTask.correctSentence,
         });
-      } catch (error) {
-        console.log("Failed to save sentence activity:", error);
+
+        return;
       }
 
-      return;
-    }
+      setBackendResult(null);
+      setResult("wrong");
+      setShowResultPopup(true);
 
-    setResult("wrong");
-    setShowResultPopup(true);
-
-    try {
       await addActivity({
         type: "sentenceBuilding",
         title: "Sentence building correction",
@@ -349,8 +440,6 @@ export default function SentenceBuildingScreen() {
         mistake: "Word order / sentence pattern",
         correctedSentence: selectedTask.correctSentence,
       });
-    } catch (error) {
-      console.log("Failed to save correction activity:", error);
     }
   };
 
@@ -372,11 +461,11 @@ export default function SentenceBuildingScreen() {
         await addActivity({
           type: "sentenceBuilding",
           title: "Sentence repeat practice",
-          detail: `Repeated: ${selectedTask.correctSentence}`,
+          detail: `Repeated: ${popupRepeatSentence}`,
           score: 82,
           confidence: 72,
           fluency: 70,
-          correctedSentence: selectedTask.correctSentence,
+          correctedSentence: popupRepeatSentence,
         });
       } catch (error) {
         console.log("Failed to save repeat activity:", error);
@@ -400,14 +489,6 @@ export default function SentenceBuildingScreen() {
     return "mic-outline";
   };
 
-  const getMistakeText = () => {
-    if (isCorrect) {
-      return "No mistake found. Your word order is correct.";
-    }
-
-    return "Your word order needs correction. Compare your answer with the correct sentence and follow the sentence pattern.";
-  };
-
   const getResultText = () => {
     if (isCorrect) {
       return "Correct. You built the sentence in the right order.";
@@ -423,7 +504,6 @@ export default function SentenceBuildingScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -438,7 +518,6 @@ export default function SentenceBuildingScreen() {
           <View style={styles.emptyBox} />
         </View>
 
-        {/* Practice Selector */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Choose Practice</Text>
           <Text style={styles.sectionSubtitle}>
@@ -478,7 +557,6 @@ export default function SentenceBuildingScreen() {
           })}
         </ScrollView>
 
-        {/* Main Builder Card */}
         <View style={styles.builderCard}>
           <View style={styles.builderTopRow}>
             <View style={styles.builderTextBox}>
@@ -502,6 +580,7 @@ export default function SentenceBuildingScreen() {
               setTypedSentence(text);
               setResult("idle");
               setRepeatState("idle");
+              setBackendResult(null);
             }}
             placeholder="Type your sentence here..."
             placeholderTextColor="#94A3B8"
@@ -510,37 +589,37 @@ export default function SentenceBuildingScreen() {
           />
 
           <View style={styles.suggestionArea}>
-  <View style={styles.suggestionHeader}>
-    <Text style={styles.suggestionTitle}>Smart word suggestions</Text>
-    <Text style={styles.suggestionHint}>Tap to add</Text>
-  </View>
+            <View style={styles.suggestionHeader}>
+              <Text style={styles.suggestionTitle}>Smart word suggestions</Text>
+              <Text style={styles.suggestionHint}>Tap to add</Text>
+            </View>
 
-  <View style={styles.wordWrap}>
-    {smartWordSuggestions.length > 0 ? (
-      smartWordSuggestions.map((word, index) => (
-        <TouchableOpacity
-          key={`${word}-${index}`}
-          style={styles.wordChip}
-          onPress={() => appendSuggestionWord(word)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.wordChipText}>{word}</Text>
-        </TouchableOpacity>
-      ))
-    ) : (
-      <Text style={styles.allWordsUsedText}>
-        All suggested words are used. You can still type manually.
-      </Text>
-    )}
-  </View>
-</View>
+            <View style={styles.wordWrap}>
+              {smartWordSuggestions.length > 0 ? (
+                smartWordSuggestions.map((word, index) => (
+                  <TouchableOpacity
+                    key={`${word}-${index}`}
+                    style={styles.wordChip}
+                    onPress={() => appendSuggestionWord(word)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.wordChipText}>{word}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={styles.allWordsUsedText}>
+                  All suggested words are used. You can still type manually.
+                </Text>
+              )}
+            </View>
+          </View>
 
-<View style={styles.correctPreviewBox}>
-  <Text style={styles.correctPreviewLabel}>Correct sentence preview</Text>
-  <Text style={styles.correctPreviewText}>
-    {selectedTask.correctSentence}
-  </Text>
-</View>
+          <View style={styles.correctPreviewBox}>
+            <Text style={styles.correctPreviewLabel}>Correct sentence preview</Text>
+            <Text style={styles.correctPreviewText}>
+              {selectedTask.correctSentence}
+            </Text>
+          </View>
 
           <View style={styles.actionRow}>
             <TouchableOpacity
@@ -655,7 +734,7 @@ export default function SentenceBuildingScreen() {
           <View style={styles.listenSpeakActionRow}>
             <TouchableOpacity
               style={styles.listenButton}
-              onPress={() => speakText(selectedTask.correctSentence)}
+              onPress={() => speakText(popupCorrectSentence)}
               activeOpacity={0.85}
             >
               <Ionicons
@@ -682,7 +761,6 @@ export default function SentenceBuildingScreen() {
           </View>
         </View>
 
-        {/* Future Upgrade Card */}
         <View style={styles.futureCard}>
           <View style={styles.futureHeaderRow}>
             <View style={styles.futureIcon}>
@@ -716,7 +794,6 @@ export default function SentenceBuildingScreen() {
         </View>
       </ScrollView>
 
-      {/* Result Popup */}
       <Modal
         visible={showResultPopup}
         transparent
@@ -791,7 +868,7 @@ export default function SentenceBuildingScreen() {
 
               <View style={styles.modalScoreBox}>
                 <Text style={styles.modalScoreLabel}>Sentence score</Text>
-                <Text style={styles.modalScoreValue}>{resultScore}%</Text>
+                <Text style={styles.modalScoreValue}>{popupScore}%</Text>
               </View>
 
               <View
@@ -822,12 +899,12 @@ export default function SentenceBuildingScreen() {
               <View style={styles.modalCorrectBox}>
                 <Text style={styles.modalCorrectLabel}>Correct answer</Text>
                 <Text style={styles.modalCorrectText}>
-                  {selectedTask.correctSentence}
+                  {popupCorrectSentence}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(selectedTask.correctSentence)}
+                  onPress={() => speakText(popupCorrectSentence)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -852,11 +929,13 @@ export default function SentenceBuildingScreen() {
                   />
 
                   <Text style={styles.modalMistakeTitle}>
-                    {isCorrect ? "Mistake" : "Mistake Found"}
+                    {isCorrect ? "Mistake" : "Mistakes Found"}
                   </Text>
                 </View>
 
-                <Text style={styles.modalMistakeText}>{getMistakeText()}</Text>
+                <Text style={styles.modalMistakeText}>
+                  {popupMistakes.join(", ")}
+                </Text>
               </View>
 
               <View style={styles.modalRuleBox}>
@@ -869,9 +948,7 @@ export default function SentenceBuildingScreen() {
                   <Text style={styles.modalRuleTitle}>Correction</Text>
                 </View>
 
-                <Text style={styles.modalRuleText}>
-                  {selectedTask.simpleRule}
-                </Text>
+                <Text style={styles.modalRuleText}>{popupCorrection}</Text>
               </View>
 
               <View style={styles.teacherBox}>
@@ -885,7 +962,7 @@ export default function SentenceBuildingScreen() {
                 </View>
 
                 <Text style={styles.modalRuleText}>
-                  {selectedTask.teacherExplanation}
+                  {popupTeacherExplanation}
                 </Text>
               </View>
 
@@ -906,12 +983,12 @@ export default function SentenceBuildingScreen() {
               <View style={styles.modalSuggestionBox}>
                 <Text style={styles.modalSectionTitle}>Smart Suggestion</Text>
                 <Text style={styles.modalSuggestionText}>
-                  {selectedTask.smartSuggestion}
+                  {popupSmartSuggestion}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(selectedTask.smartSuggestion)}
+                  onPress={() => speakText(popupSmartSuggestion)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -944,7 +1021,7 @@ export default function SentenceBuildingScreen() {
 
                 <View style={styles.modalRepeatSentenceBox}>
                   <Text style={styles.modalRepeatSentence}>
-                    {selectedTask.correctSentence}
+                    {popupRepeatSentence}
                   </Text>
                 </View>
               </View>
@@ -953,7 +1030,7 @@ export default function SentenceBuildingScreen() {
             <View style={styles.modalActionRow}>
               <TouchableOpacity
                 style={styles.modalLightButton}
-                onPress={() => speakText(selectedTask.correctSentence)}
+                onPress={() => speakText(popupCorrectSentence)}
                 activeOpacity={0.85}
               >
                 <Ionicons
@@ -1164,30 +1241,29 @@ const styles = StyleSheet.create({
     color: ACTION_COLOR,
     fontWeight: "900",
   },
-  
+
   correctPreviewBox: {
-  marginTop: 14,
-  backgroundColor: "#ECFDF5",
-  borderRadius: 16,
-  padding: 13,
-  borderWidth: 1,
-  borderColor: "#BBF7D0",
-},
+    marginTop: 14,
+    backgroundColor: "#ECFDF5",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
 
-correctPreviewLabel: {
-  fontSize: 12,
-  color: "#166534",
-  fontWeight: "900",
-  marginBottom: 5,
-},
+  correctPreviewLabel: {
+    fontSize: 12,
+    color: "#166534",
+    fontWeight: "900",
+    marginBottom: 5,
+  },
 
-correctPreviewText: {
-  fontSize: 16,
-  lineHeight: 23,
-  color: "#166534",
-  fontWeight: "900",
-},
-
+  correctPreviewText: {
+    fontSize: 16,
+    lineHeight: 23,
+    color: "#166534",
+    fontWeight: "900",
+  },
 
   wordWrap: {
     flexDirection: "row",

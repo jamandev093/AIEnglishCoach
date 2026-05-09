@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 
+import { analyzeSentenceWithBackend } from "../src/config/api";
 import { addActivity } from "../src/utils/activityHistory";
 
 import {
@@ -321,6 +322,14 @@ export default function VocabularyScreen() {
     setTypedSentence("");
     setPracticeState("idle");
     setShowResultPopup(false);
+    setResultData({
+      score: 0,
+      word: selectedWord.word,
+      userSentence: "",
+      betterSentence: selectedWord.nativeStyle,
+      mistake: selectedWord.mistakeTip,
+      coachTip: "Use the word in a full sentence, then say it aloud.",
+    });
   };
 
   const saveVocabularyPractice = async (data: ResultData) => {
@@ -345,24 +354,54 @@ export default function VocabularyScreen() {
     const finalSentence =
       typedSentence.trim() || `I want to use ${selectedWord.word}.`;
 
-    const result: ResultData = {
-      score: finalSentence
-        .toLowerCase()
-        .includes(selectedWord.word.toLowerCase())
-        ? 78
-        : 62,
-      word: selectedWord.word,
-      userSentence: finalSentence,
-      betterSentence: selectedWord.nativeStyle,
-      mistake: selectedWord.mistakeTip,
-      coachTip:
-        "Good. Now repeat the better sentence and try to use this word naturally in real conversation.",
-    };
+    try {
+      const backendResult = await analyzeSentenceWithBackend(finalSentence);
 
-    setResultData(result);
-    setPracticeState("checked");
-    setShowResultPopup(true);
-    await saveVocabularyPractice(result);
+      const result: ResultData = {
+        score: backendResult.score || 0,
+        word: selectedWord.word,
+        userSentence: backendResult.originalText || finalSentence,
+        betterSentence:
+          backendResult.correctedText ||
+          backendResult.improved ||
+          selectedWord.nativeStyle,
+        mistake:
+          backendResult.mistakes && backendResult.mistakes.length > 0
+            ? backendResult.mistakes.join(", ")
+            : "No major mistake found",
+        coachTip:
+          backendResult.smartSuggestion ||
+          backendResult.coachReply ||
+          backendResult.simpleExplanation ||
+          "Good. Now repeat the better sentence and try to use this word naturally in real conversation.",
+      };
+
+      setResultData(result);
+      setPracticeState("checked");
+      setShowResultPopup(true);
+      await saveVocabularyPractice(result);
+    } catch (error) {
+      console.log("Vocabulary backend error:", error);
+
+      const fallbackResult: ResultData = {
+        score: finalSentence
+          .toLowerCase()
+          .includes(selectedWord.word.toLowerCase())
+          ? 78
+          : 62,
+        word: selectedWord.word,
+        userSentence: finalSentence,
+        betterSentence: selectedWord.nativeStyle,
+        mistake: selectedWord.mistakeTip,
+        coachTip:
+          "Backend is not reachable, so this is the local MVP result. Repeat the better sentence slowly.",
+      };
+
+      setResultData(fallbackResult);
+      setPracticeState("checked");
+      setShowResultPopup(true);
+      await saveVocabularyPractice(fallbackResult);
+    }
   };
 
   const startRepeatFromPopup = () => {

@@ -1,10 +1,15 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-from services.coach_service import analyze_sentence
-from services.stt_service import fake_transcribe_audio
+from analyzer import analyze_sentence, fake_transcribe_audio
 
-app = FastAPI()
+
+app = FastAPI(
+    title="AI English Coach Backend",
+    version="1.0.0",
+    description="Backend API for AI English Coach MVP",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,23 +20,39 @@ app.add_middleware(
 )
 
 
+class AnalyzeRequest(BaseModel):
+    text: str
+
+
 @app.get("/")
-def home():
-    return {"message": "Backend is running 🚀"}
+def root():
+    return {
+        "success": True,
+        "message": "AI English Coach backend is running 🚀",
+    }
+
+
+@app.get("/health")
+def health_check():
+    return {
+        "success": True,
+        "status": "healthy",
+        "service": "AI English Coach Backend",
+    }
 
 
 @app.post("/analyze")
-def analyze(data: dict):
-    text = data.get("text", "")
-    return analyze_sentence(text)
+def analyze_text(request: AnalyzeRequest):
+    result = analyze_sentence(request.text)
+    return result
 
 
 @app.post("/speech/analyze")
-async def speech_analyze(file: UploadFile = File(...)):
-    spoken_text = await fake_transcribe_audio(file)
-    result = analyze_sentence(spoken_text)
+async def analyze_speech(file: UploadFile = File(...)):
+    transcribed_text = fake_transcribe_audio(file.filename)
+    result = analyze_sentence(transcribed_text)
 
-    return {
-        "text": spoken_text,
-        **result,
-    }
+    result["audioFileName"] = file.filename
+    result["transcribedText"] = transcribed_text
+
+    return result
