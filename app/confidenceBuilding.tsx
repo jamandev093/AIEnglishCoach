@@ -13,6 +13,10 @@ import {
   View,
 } from "react-native";
 
+import {
+  analyzeSentenceWithBackend,
+  type AnalyzeApiResponse,
+} from "../src/config/api";
 import { addActivity } from "../src/utils/activityHistory";
 
 type MissionState = "idle" | "watching" | "ready" | "recording" | "completed";
@@ -37,6 +41,22 @@ type ConfidenceMission = {
   coachTip: string;
 };
 
+type ConfidenceResult = {
+  originalText: string;
+  correctedText: string;
+  score: number;
+  confidenceScore: number;
+  fluencyScore: number;
+  responseScore: number;
+  mistakes: string[];
+  simpleExplanation: string;
+  teacherExplanation: string;
+  smartSuggestion: string;
+  repeatSentence: string;
+  coachReply: string;
+  usedBackend: boolean;
+};
+
 const ACTION_COLOR = "#8499DC";
 const RECORDING_COLOR = "#DC2626";
 
@@ -50,8 +70,7 @@ const missions: ConfidenceMission[] = [
     level: "Beginner",
     videoLength: "10 sec",
     videoEmoji: "🛒",
-    videoScene:
-      "A shopkeeper looks at you and asks what you want to buy.",
+    videoScene: "A shopkeeper looks at you and asks what you want to buy.",
     prompt: "Speak what you are seeing in the video in a simple confident way.",
     sentenceStarters: [
       "In this video...",
@@ -63,8 +82,7 @@ const missions: ConfidenceMission[] = [
     userSample: "A shopkeeper asking what I want buy.",
     betterResponse:
       "In this video, a shopkeeper is asking what I want to buy.",
-    mistake:
-      "Missing helping verb “is” and missing “to” after want.",
+    mistake: "Missing helping verb “is” and missing “to” after want.",
     coachTip:
       "Good try. Describe the scene in a full sentence and speak slowly.",
   },
@@ -77,8 +95,7 @@ const missions: ConfidenceMission[] = [
     level: "Intermediate",
     videoLength: "10 sec",
     videoEmoji: "💼",
-    videoScene:
-      "A colleague asks you to explain your idea in simple words.",
+    videoScene: "A colleague asks you to explain your idea in simple words.",
     prompt: "Speak what you are seeing in the video clearly and confidently.",
     sentenceStarters: [
       "In this video...",
@@ -90,8 +107,7 @@ const missions: ConfidenceMission[] = [
     userSample: "My colleague asking me explain my idea.",
     betterResponse:
       "In this video, my colleague is asking me to explain my idea.",
-    mistake:
-      "Missing helping verb “is” and missing “to” before explain.",
+    mistake: "Missing helping verb “is” and missing “to” before explain.",
     coachTip:
       "Very good. Use a complete sentence to describe the office situation.",
   },
@@ -104,8 +120,7 @@ const missions: ConfidenceMission[] = [
     level: "Beginner",
     videoLength: "10 sec",
     videoEmoji: "👩‍🏫",
-    videoScene:
-      "A teacher asks why you were absent yesterday.",
+    videoScene: "A teacher asks why you were absent yesterday.",
     prompt: "Speak what you are seeing in the video in a respectful way.",
     sentenceStarters: [
       "In this video...",
@@ -124,6 +139,82 @@ const missions: ConfidenceMission[] = [
   },
 ];
 
+function buildFallbackResult(
+  mission: ConfidenceMission,
+  spokenText: string
+): ConfidenceResult {
+  return {
+    originalText: spokenText,
+    correctedText: mission.betterResponse,
+    score: 74,
+    confidenceScore: 72,
+    fluencyScore: 68,
+    responseScore: 70,
+    mistakes: [mission.mistake],
+    simpleExplanation: mission.mistake,
+    teacherExplanation:
+      "Use a full sentence when describing a real-life situation. Add the missing helping verb and use the correct small words.",
+    smartSuggestion: mission.coachTip,
+    repeatSentence: mission.betterResponse,
+    coachReply: mission.coachTip,
+    usedBackend: false,
+  };
+}
+
+function mapBackendResult(
+  mission: ConfidenceMission,
+  spokenText: string,
+  result: AnalyzeApiResponse
+): ConfidenceResult {
+  const correctedText =
+    result.correctedText ||
+    result.improved ||
+    result.repeatSentence ||
+    mission.betterResponse;
+
+  const backendScore =
+    typeof result.score === "number" && !Number.isNaN(result.score)
+      ? result.score
+      : 74;
+
+  return {
+    originalText: result.originalText || spokenText,
+    correctedText,
+    score: backendScore,
+    confidenceScore:
+      typeof result.confidenceScore === "number"
+        ? result.confidenceScore
+        : Math.min(100, backendScore + 2),
+    fluencyScore:
+      typeof result.fluencyScore === "number"
+        ? result.fluencyScore
+        : Math.max(0, backendScore - 4),
+    responseScore:
+      typeof result.pronunciationScore === "number"
+        ? result.pronunciationScore
+        : backendScore,
+    mistakes:
+      Array.isArray(result.mistakes) && result.mistakes.length > 0
+        ? result.mistakes
+        : [mission.mistake],
+    simpleExplanation:
+      result.simpleExplanation ||
+      "The AI improved your sentence so it sounds more natural.",
+    teacherExplanation:
+      result.teacherExplanation ||
+      "Use a complete sentence and add the missing small words.",
+    smartSuggestion:
+      result.smartSuggestion ||
+      "Repeat the corrected sentence slowly and clearly.",
+    repeatSentence: result.repeatSentence || correctedText,
+    coachReply:
+      result.coachReply ||
+      result.smartSuggestion ||
+      "Good effort. Now repeat the better sentence with confidence.",
+    usedBackend: true,
+  };
+}
+
 export default function ConfidenceBuildingScreen() {
   const [selectedMission, setSelectedMission] = useState<ConfidenceMission>(
     missions[0]
@@ -132,6 +223,7 @@ export default function ConfidenceBuildingScreen() {
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
   const [userAnswer, setUserAnswer] = useState("");
+  const [resultData, setResultData] = useState<ConfidenceResult | null>(null);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(12)).current;
@@ -147,6 +239,9 @@ export default function ConfidenceBuildingScreen() {
       setMissionState("idle");
       setRepeatState("idle");
       setShowResultPopup(false);
+      setUserAnswer("");
+      setResultData(null);
+      Speech.stop();
     }, [])
   );
 
@@ -254,6 +349,7 @@ export default function ConfidenceBuildingScreen() {
     setRepeatState("idle");
     setShowResultPopup(false);
     setUserAnswer("");
+    setResultData(null);
   };
 
   const watchVideoMission = () => {
@@ -264,19 +360,45 @@ export default function ConfidenceBuildingScreen() {
     }, 1200);
   };
 
+  const analyzeConfidenceAnswer = async (spokenText: string) => {
+    try {
+      const backendResult = await analyzeSentenceWithBackend(spokenText);
+      return mapBackendResult(selectedMission, spokenText, backendResult);
+    } catch (error) {
+      return buildFallbackResult(selectedMission, spokenText);
+    }
+  };
+
+  const saveConfidenceActivity = async (result: ConfidenceResult) => {
+    await addActivity({
+      type: "confidence",
+      title: selectedMission.title,
+      detail: `Confidence mission: ${result.originalText}`,
+      score: result.score,
+      confidence: result.confidenceScore,
+      fluency: result.fluencyScore,
+      mistake: result.mistakes.join(", "),
+      correctedSentence: result.correctedText,
+    });
+  };
+
   const handleMainAction = async () => {
     if (repeatState === "recording") {
+      const repeatSentence =
+        resultData?.repeatSentence || selectedMission.betterResponse;
+
       setRepeatState("saved");
 
       await addActivity({
         type: "confidence",
         title: "Confidence repeat practice",
-        detail: `Repeated: ${selectedMission.betterResponse}`,
+        detail: `Repeated: ${repeatSentence}`,
         score: 82,
         confidence: 76,
         fluency: 70,
-        mistake: selectedMission.mistake,
-        correctedSentence: selectedMission.betterResponse,
+        mistake:
+          resultData?.mistakes.join(", ") || selectedMission.mistake,
+        correctedSentence: repeatSentence,
       });
 
       return;
@@ -286,19 +408,15 @@ export default function ConfidenceBuildingScreen() {
       setRepeatState("idle");
       setMissionState("idle");
       setUserAnswer("");
+      setResultData(null);
       return;
     }
-
-   if (missionState === "idle" || missionState === "ready") {
-  setMissionState("recording");
-  return;
-}
 
     if (missionState === "watching") {
       return;
     }
 
-    if (missionState === "ready") {
+    if (missionState === "idle" || missionState === "ready") {
       setMissionState("recording");
       return;
     }
@@ -307,19 +425,14 @@ export default function ConfidenceBuildingScreen() {
       const simulatedAnswer = selectedMission.userSample;
 
       setUserAnswer(simulatedAnswer);
+
+      const analyzedResult = await analyzeConfidenceAnswer(simulatedAnswer);
+
+      setResultData(analyzedResult);
       setMissionState("completed");
       setShowResultPopup(true);
 
-      await addActivity({
-        type: "confidence",
-        title: selectedMission.title,
-        detail: `Confidence mission: ${simulatedAnswer}`,
-        score: 74,
-        confidence: 72,
-        fluency: 68,
-        mistake: selectedMission.mistake,
-        correctedSentence: selectedMission.betterResponse,
-      });
+      await saveConfidenceActivity(analyzedResult);
 
       return;
     }
@@ -342,6 +455,7 @@ export default function ConfidenceBuildingScreen() {
     setRepeatState("idle");
     setShowResultPopup(false);
     setUserAnswer("");
+    setResultData(null);
   };
 
   const openLiveMode = () => {
@@ -352,22 +466,26 @@ export default function ConfidenceBuildingScreen() {
   };
 
   const getMainButtonText = () => {
-  if (repeatState === "recording") return "Recording";
-  if (repeatState === "saved") return "Practice Again";
-  if (missionState === "watching") return "Watching...";
-  if (missionState === "recording") return "Recording";
-  if (missionState === "completed") return "Repeat";
-  return "Start";
-};
+    if (repeatState === "recording") return "Save Repeat";
+    if (repeatState === "saved") return "Practice Again";
+    if (missionState === "watching") return "Watching...";
+    if (missionState === "recording") return "Stop & Check";
+    if (missionState === "completed") return "Repeat";
+    return "Start";
+  };
 
   const getMainButtonIcon = (): keyof typeof Ionicons.glyphMap => {
-  if (repeatState === "recording") return "stop";
-  if (repeatState === "saved") return "refresh-outline";
-  if (missionState === "watching") return "hourglass-outline";
-  if (missionState === "recording") return "stop";
-  if (missionState === "completed") return "repeat-outline";
-  return "mic-outline";
-};
+    if (repeatState === "recording") return "checkmark-outline";
+    if (repeatState === "saved") return "refresh-outline";
+    if (missionState === "watching") return "hourglass-outline";
+    if (missionState === "recording") return "stop";
+    if (missionState === "completed") return "repeat-outline";
+    return "mic-outline";
+  };
+
+  const popupResult =
+    resultData || buildFallbackResult(selectedMission, userAnswer);
+
   return (
     <>
       <ScrollView
@@ -437,56 +555,66 @@ export default function ConfidenceBuildingScreen() {
 
         <View style={styles.videoMissionCard}>
           <View style={styles.videoTopRow}>
-            <View>
+            <View style={styles.videoTitleBox}>
               <Text style={styles.videoLabel}>Confidence Building</Text>
               <Text style={styles.videoTitle}>{selectedMission.title}</Text>
             </View>
 
             <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>{selectedMission.videoLength}</Text>
+              <Text style={styles.durationText}>
+                {selectedMission.videoLength}
+              </Text>
             </View>
           </View>
 
           <TouchableOpacity
-           style={styles.videoBox}
+            style={styles.videoBox}
             onPress={watchVideoMission}
             activeOpacity={0.9}
->
-           <Text style={styles.videoEmoji}>{selectedMission.videoEmoji}</Text>
-           <Text style={styles.videoScene}>{selectedMission.videoScene}</Text>
+          >
+            <Text style={styles.videoEmoji}>
+              {selectedMission.videoEmoji}
+            </Text>
+            <Text style={styles.videoScene}>
+              {selectedMission.videoScene}
+            </Text>
 
-           <View style={styles.videoOverlay}>
-           <Ionicons
-            name={
-            missionState === "watching"
-          ? "hourglass-outline"
-          : missionState === "ready"
-          ? "checkmark-circle-outline"
-          : "play-circle-outline"
-         }
-          size={38}
-          color="#FFFFFF"
-           />
+            <View style={styles.videoOverlay}>
+              <Ionicons
+                name={
+                  missionState === "watching"
+                    ? "hourglass-outline"
+                    : missionState === "ready"
+                    ? "checkmark-circle-outline"
+                    : "play-circle-outline"
+                }
+                size={38}
+                color="#FFFFFF"
+              />
 
-        <Text style={styles.videoOverlayText}>
-      {missionState === "watching"
-        ? "Watching..."
-        : missionState === "ready"
-        ? "Video watched"
-        : "Tap thumbnail to watch"}
-        </Text>
-        </View>
-      </TouchableOpacity>
+              <Text style={styles.videoOverlayText}>
+                {missionState === "watching"
+                  ? "Watching..."
+                  : missionState === "ready"
+                  ? "Video watched"
+                  : "Tap thumbnail to watch"}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.contextGrid}>
             <View style={styles.contextBox}>
               <Text style={styles.contextLabel}>Situation</Text>
-              <Text style={styles.contextText}>{selectedMission.situation}</Text>
+              <Text style={styles.contextText}>
+                {selectedMission.situation}
+              </Text>
             </View>
 
             <View style={styles.contextBox}>
               <Text style={styles.contextLabel}>Accent</Text>
-              <Text style={styles.contextText}>{selectedMission.accent}</Text>
+              <Text style={styles.contextText}>
+                {selectedMission.accent}
+              </Text>
             </View>
           </View>
 
@@ -508,7 +636,8 @@ export default function ConfidenceBuildingScreen() {
             <View style={styles.speakTextBox}>
               <Text style={styles.speakTitle}>Speak with Confidence</Text>
               <Text style={styles.speakText}>
-                Watch the 10-second situation, then speak what you are seeing in the video.
+                Watch the 10-second situation, then speak what you are seeing in
+                the video.
               </Text>
             </View>
 
@@ -521,69 +650,69 @@ export default function ConfidenceBuildingScreen() {
               <Text style={styles.liveButtonText}>Live</Text>
             </TouchableOpacity>
           </View>
-          
-      
-               <View
-  style={[
-    styles.recordBox,
-    isRecording && styles.recordBoxActive,
-  ]}
->
-  <Animated.View
-    style={[
-      styles.micCircle,
-      isRecording && {
-        backgroundColor: RECORDING_COLOR,
-        borderColor: RECORDING_COLOR,
-        transform: [{ scale: pulseAnim }],
-      },
-    ]}
-  >
-    <Ionicons
-      name={isRecording ? "radio-button-on" : "mic-outline"}
-      size={26}
-      color={isRecording ? "#FFFFFF" : ACTION_COLOR}
-    />
-  </Animated.View>
 
-  <View style={styles.recordContentRight}>
-    <View style={styles.waveBox}>
-      <Animated.View style={[styles.waveBar, { height: barOne }]} />
-      <Animated.View style={[styles.waveBar, { height: barTwo }]} />
-      <Animated.View style={[styles.waveBar, { height: barThree }]} />
-      <Animated.View style={[styles.waveBar, { height: barFour }]} />
-    </View>
+          <View
+            style={[
+              styles.recordBox,
+              isRecording && styles.recordBoxActive,
+            ]}
+          >
+            <Animated.View
+              style={[
+                styles.micCircle,
+                isRecording && {
+                  backgroundColor: RECORDING_COLOR,
+                  borderColor: RECORDING_COLOR,
+                  transform: [{ scale: pulseAnim }],
+                },
+              ]}
+            >
+              <Ionicons
+                name={isRecording ? "radio-button-on" : "mic-outline"}
+                size={26}
+                color={isRecording ? "#FFFFFF" : ACTION_COLOR}
+              />
+            </Animated.View>
 
-    <Text style={styles.recordStatusTitle}>
-      {isRecording
-        ? "Recording..."
-        : repeatState === "saved"
-        ? "Repeat saved"
-        : missionState === "watching"
-        ? "Watching video..."
-        : missionState === "ready"
-        ? "Ready to speak"
-        : missionState === "completed"
-        ? "Result ready"
-        : "Ready"}
-    </Text>
+            <View style={styles.recordContentRight}>
+              <View style={styles.waveBox}>
+                <Animated.View style={[styles.waveBar, { height: barOne }]} />
+                <Animated.View style={[styles.waveBar, { height: barTwo }]} />
+                <Animated.View
+                  style={[styles.waveBar, { height: barThree }]}
+                />
+                <Animated.View style={[styles.waveBar, { height: barFour }]} />
+              </View>
 
-    <Text style={styles.recordStatusText}>
-      {isRecording
-        ? "Speak slowly and describe the video clearly."
-        : repeatState === "saved"
-        ? "Your repeat practice was saved to Progress."
-        : missionState === "watching"
-        ? "Watch the video carefully and notice the situation."
-        : missionState === "ready"
-        ? "Tap Start and speak what you are seeing."
-        : missionState === "completed"
-        ? "Tap Repeat to practice the AI-corrected response."
-        : "Tap Watch first, then describe the video."}
-    </Text>
-  </View>
-</View>
+              <Text style={styles.recordStatusTitle}>
+                {isRecording
+                  ? "Recording..."
+                  : repeatState === "saved"
+                  ? "Repeat saved"
+                  : missionState === "watching"
+                  ? "Watching video..."
+                  : missionState === "ready"
+                  ? "Ready to speak"
+                  : missionState === "completed"
+                  ? "Result ready"
+                  : "Ready"}
+              </Text>
 
+              <Text style={styles.recordStatusText}>
+                {isRecording
+                  ? "Speak slowly and describe the video clearly."
+                  : repeatState === "saved"
+                  ? "Your repeat practice was saved to Progress."
+                  : missionState === "watching"
+                  ? "Watch the video carefully and notice the situation."
+                  : missionState === "ready"
+                  ? "Tap Start and speak what you are seeing."
+                  : missionState === "completed"
+                  ? "Tap Repeat to practice the AI-corrected response."
+                  : "Tap Watch first, then describe the video."}
+              </Text>
+            </View>
+          </View>
 
           {repeatState === "saved" && (
             <View style={styles.savedBox}>
@@ -613,7 +742,9 @@ export default function ConfidenceBuildingScreen() {
               activeOpacity={0.85}
             >
               <Ionicons name={getMainButtonIcon()} size={18} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>{getMainButtonText()}</Text>
+              <Text style={styles.primaryButtonText}>
+                {getMainButtonText()}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -629,7 +760,11 @@ export default function ConfidenceBuildingScreen() {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={styles.modalIcon}>
-                <Ionicons name="sparkles-outline" size={23} color={ACTION_COLOR} />
+                <Ionicons
+                  name="sparkles-outline"
+                  size={23}
+                  color={ACTION_COLOR}
+                />
               </View>
 
               <View style={styles.modalTitleBox}>
@@ -646,40 +781,63 @@ export default function ConfidenceBuildingScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.scoreGrid}>
                 <View style={styles.scoreMiniBox}>
-                  <Text style={styles.scoreValue}>74%</Text>
+                  <Text style={styles.scoreValue}>
+                    {popupResult.confidenceScore}%
+                  </Text>
                   <Text style={styles.scoreLabel}>Confidence</Text>
                 </View>
 
                 <View style={styles.scoreMiniBox}>
-                  <Text style={styles.scoreValue}>68%</Text>
+                  <Text style={styles.scoreValue}>
+                    {popupResult.fluencyScore}%
+                  </Text>
                   <Text style={styles.scoreLabel}>Fluency</Text>
                 </View>
 
                 <View style={styles.scoreMiniBox}>
-                  <Text style={styles.scoreValue}>70%</Text>
+                  <Text style={styles.scoreValue}>
+                    {popupResult.score}%
+                  </Text>
                   <Text style={styles.scoreLabel}>Response</Text>
                 </View>
               </View>
 
+              {!popupResult.usedBackend && (
+                <View style={styles.fallbackNotice}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={18}
+                    color="#92400E"
+                  />
+                  <Text style={styles.fallbackNoticeText}>
+                    Local fallback result used. Backend connection can be tested
+                    again after this screen is stable.
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.userAnswerBox}>
                 <Text style={styles.userAnswerLabel}>Your response</Text>
                 <Text style={styles.userAnswerText}>
-                  {userAnswer || selectedMission.userSample}
+                  {popupResult.originalText}
                 </Text>
               </View>
 
               <View style={styles.correctBox}>
                 <Text style={styles.correctLabel}>AI better response</Text>
                 <Text style={styles.correctText}>
-                  {selectedMission.betterResponse}
+                  {popupResult.correctedText}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(selectedMission.betterResponse)}
+                  onPress={() => speakText(popupResult.correctedText)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -698,10 +856,14 @@ export default function ConfidenceBuildingScreen() {
                     size={22}
                     color={ACTION_COLOR}
                   />
-                  <Text style={styles.modalInfoTitle}>AI correction</Text>
+                  <Text style={styles.modalInfoTitle}>Mistakes found</Text>
                 </View>
 
-                <Text style={styles.modalInfoText}>{selectedMission.mistake}</Text>
+                {popupResult.mistakes.map((mistake) => (
+                  <Text key={mistake} style={styles.modalInfoText}>
+                    • {mistake}
+                  </Text>
+                ))}
               </View>
 
               <View style={styles.coachBox}>
@@ -714,26 +876,48 @@ export default function ConfidenceBuildingScreen() {
                   <Text style={styles.modalInfoTitle}>AI response</Text>
                 </View>
 
-                <Text style={styles.modalInfoText}>{selectedMission.coachTip}</Text>
+                <Text style={styles.modalInfoText}>
+                  {popupResult.coachReply}
+                </Text>
+              </View>
+
+              <View style={styles.modalInfoBox}>
+                <View style={styles.modalInfoTopRow}>
+                  <Ionicons
+                    name="school-outline"
+                    size={22}
+                    color={ACTION_COLOR}
+                  />
+                  <Text style={styles.modalInfoTitle}>Teacher explanation</Text>
+                </View>
+
+                <Text style={styles.modalInfoText}>
+                  {popupResult.teacherExplanation}
+                </Text>
               </View>
 
               <View style={styles.modalRepeatBox}>
                 <View style={styles.modalRepeatTopRow}>
                   <View style={styles.modalRepeatIcon}>
-                    <Ionicons name="mic-outline" size={23} color={ACTION_COLOR} />
+                    <Ionicons
+                      name="mic-outline"
+                      size={23}
+                      color={ACTION_COLOR}
+                    />
                   </View>
 
                   <View style={styles.modalRepeatTextBox}>
                     <Text style={styles.modalRepeatTitle}>Repeat It</Text>
                     <Text style={styles.modalRepeatSubtitle}>
-                      Repeat the AI-corrected response to build real speaking confidence.
+                      Repeat the AI-corrected response to build real speaking
+                      confidence.
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.modalRepeatSentenceBox}>
                   <Text style={styles.modalRepeatSentence}>
-                    {selectedMission.betterResponse}
+                    {popupResult.repeatSentence}
                   </Text>
                 </View>
               </View>
@@ -742,7 +926,7 @@ export default function ConfidenceBuildingScreen() {
             <View style={styles.modalActionRow}>
               <TouchableOpacity
                 style={styles.modalLightButton}
-                onPress={() => speakText(selectedMission.betterResponse)}
+                onPress={() => speakText(popupResult.repeatSentence)}
                 activeOpacity={0.85}
               >
                 <Ionicons
@@ -880,6 +1064,11 @@ const styles = StyleSheet.create({
     marginBottom: 13,
   },
 
+  videoTitleBox: {
+    flex: 1,
+    paddingRight: 10,
+  },
+
   videoLabel: {
     fontSize: 12,
     color: "#64748B",
@@ -1013,13 +1202,13 @@ const styles = StyleSheet.create({
   },
 
   speakCard: {
-  backgroundColor: "#FFFFFF",
-  borderRadius: 24,
-  padding: 12,
-  borderWidth: 1,
-  borderColor: "#E5E7EB",
-  marginBottom: 20,
-},
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 20,
+  },
 
   speakTopRow: {
     flexDirection: "row",
@@ -1062,51 +1251,51 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
- recordBox: {
-  marginTop: 10,
-  backgroundColor: "#F8FAFC",
-  borderRadius: 18,
-  padding: 10,
-  borderWidth: 1,
-  borderColor: "#E5E7EB",
-  flexDirection: "row",
-  alignItems: "center",
-},
+  recordBox: {
+    marginTop: 10,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    flexDirection: "row",
+    alignItems: "center",
+  },
 
-   recordContentRight: {
-  flex: 1,
-  marginLeft: 10,
-},
+  recordContentRight: {
+    flex: 1,
+    marginLeft: 10,
+  },
 
   recordBoxActive: {
     backgroundColor: "#FEF2F2",
     borderColor: "#FECACA",
   },
 
-    micCircle: {
-  width: 52,
-  height: 52,
-  borderRadius: 26,
-  backgroundColor: "#FFFFFF",
-  borderWidth: 1,
-  borderColor: "#E5E7EB",
-  alignItems: "center",
-  justifyContent: "center",
-},
+  micCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
- waveBox: {
-  width: 108,
-  height: 34,
-  borderRadius: 15,
-  backgroundColor: "#FFFFFF",
-  borderWidth: 1,
-  borderColor: "#E5E7EB",
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  marginBottom: 6,
-},
+  waveBox: {
+    width: 108,
+    height: 34,
+    borderRadius: 15,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
 
   waveBar: {
     width: 8,
@@ -1115,18 +1304,18 @@ const styles = StyleSheet.create({
   },
 
   recordStatusTitle: {
-  fontSize: 14,
-  color: "#0F172A",
-  fontWeight: "900",
-  marginBottom: 3,
-},
+    fontSize: 14,
+    color: "#0F172A",
+    fontWeight: "900",
+    marginBottom: 3,
+  },
 
   recordStatusText: {
-  fontSize: 12,
-  lineHeight: 18,
-  color: "#64748B",
-  fontWeight: "700",
-},
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+    fontWeight: "700",
+  },
 
   savedBox: {
     marginTop: 13,
@@ -1149,10 +1338,10 @@ const styles = StyleSheet.create({
   },
 
   actionRow: {
-  flexDirection: "row",
-  gap: 10,
-  marginTop: 10,
-},
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+  },
 
   resetButton: {
     flex: 1,
@@ -1279,6 +1468,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#334155",
     fontWeight: "900",
+  },
+
+  fallbackNotice: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  fallbackNoticeText: {
+    flex: 1,
+    marginLeft: 7,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400E",
+    fontWeight: "800",
   },
 
   userAnswerBox: {

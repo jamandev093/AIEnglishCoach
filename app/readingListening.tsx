@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 
+import { analyzeSentenceWithBackend } from "../src/config/api";
 import { addActivity } from "../src/utils/activityHistory";
 
 import {
@@ -61,12 +62,14 @@ type ResultData = {
   listeningScore: number;
   speakingScore: number;
   repeatAccuracy: number;
+  userAnswer: string;
   correction: string;
   mistake: string;
   coachTip: string;
 };
 
 const ACTION_COLOR = "#8499DC";
+const RECORDING_COLOR = "#DC2626";
 
 const stories: StoryItem[] = [
   {
@@ -276,6 +279,7 @@ export default function ReadingListeningScreen() {
     listeningScore: 78,
     speakingScore: 70,
     repeatAccuracy: 72,
+    userAnswer: "",
     correction: stories[0].questions[0].answer,
     mistake: "Try to speak the story in a complete sentence, not only one word.",
     coachTip:
@@ -422,18 +426,14 @@ export default function ReadingListeningScreen() {
     .map((item) => `${item.word} (${getKeywordMeaning(item)})`)
     .join(", ");
 
-  const chooseStory = (story: StoryItem) => {
-    setSelectedStory(story);
-    setSelectedQuestionIndex(0);
-    setPracticeState("idle");
-    setRepeatState("idle");
-    setShowResultPopup(false);
+  const resetResultData = (story: StoryItem, questionIndex = 0) => {
     setResultData({
       score: 74,
       listeningScore: 78,
       speakingScore: 70,
       repeatAccuracy: 72,
-      correction: story.questions[0].answer,
+      userAnswer: "",
+      correction: story.questions[questionIndex].answer,
       mistake:
         "Try to speak the story in a complete sentence, not only one word.",
       coachTip:
@@ -441,11 +441,22 @@ export default function ReadingListeningScreen() {
     });
   };
 
+  const chooseStory = (story: StoryItem) => {
+    setSelectedStory(story);
+    setSelectedQuestionIndex(0);
+    setPracticeState("idle");
+    setRepeatState("idle");
+    setShowResultPopup(false);
+    resetResultData(story, 0);
+  };
+
   const goNextQuestion = () => {
     setSelectedQuestionIndex((prev) => {
-      if (prev >= selectedStory.questions.length - 1) return 0;
-      return prev + 1;
+      const nextIndex = prev >= selectedStory.questions.length - 1 ? 0 : prev + 1;
+      resetResultData(selectedStory, nextIndex);
+      return nextIndex;
     });
+
     setPracticeState("idle");
     setRepeatState("idle");
     setShowResultPopup(false);
@@ -453,9 +464,11 @@ export default function ReadingListeningScreen() {
 
   const goPreviousQuestion = () => {
     setSelectedQuestionIndex((prev) => {
-      if (prev <= 0) return selectedStory.questions.length - 1;
-      return prev - 1;
+      const nextIndex = prev <= 0 ? selectedStory.questions.length - 1 : prev - 1;
+      resetResultData(selectedStory, nextIndex);
+      return nextIndex;
     });
+
     setPracticeState("idle");
     setRepeatState("idle");
     setShowResultPopup(false);
@@ -474,24 +487,64 @@ export default function ReadingListeningScreen() {
     });
   };
 
-  const handleDynamicSpeaking = async () => {
-    if (repeatState === "recording") {
-      const repeatResult: ResultData = {
-        score: 82,
-        listeningScore: 82,
-        speakingScore: 78,
-        repeatAccuracy: 84,
-        correction: selectedQuestion.answer,
-        mistake:
-          "Repeat practice improved. Keep the sentence smooth and complete.",
+  const checkAnswerWithBackend = async (answerText: string) => {
+    try {
+      const backendResult = await analyzeSentenceWithBackend(answerText);
+
+      const mistakes =
+        backendResult.mistakes && backendResult.mistakes.length > 0
+          ? backendResult.mistakes.join(", ")
+          : "No major mistake found. Try to speak smoothly and clearly.";
+
+      const newResult: ResultData = {
+        score: backendResult.score || 78,
+        listeningScore: 80,
+        speakingScore: backendResult.fluencyScore || Math.max((backendResult.score || 78) - 6, 0),
+        repeatAccuracy: backendResult.pronunciationScore || Math.max((backendResult.score || 78) - 4, 0),
+        userAnswer: backendResult.originalText || answerText,
+        correction:
+          backendResult.correctedText ||
+          backendResult.improved ||
+          selectedQuestion.answer,
+        mistake: mistakes,
         coachTip:
-          "Nice. Repeating full answers helps you build listening memory and speaking fluency.",
+          backendResult.smartSuggestion ||
+          backendResult.coachReply ||
+          backendResult.simpleExplanation ||
+          "Good attempt. Listen once more, then repeat the answer clearly.",
       };
 
-      setResultData(repeatResult);
+      setResultData(newResult);
+      await saveReadingListeningActivity(newResult);
+    } catch (error) {
+      console.log("Reading & Listening backend error:", error);
+
+      const fallbackResult: ResultData = {
+        score: 76,
+        listeningScore: 80,
+        speakingScore: 72,
+        repeatAccuracy: 74,
+        userAnswer: answerText,
+        correction: selectedQuestion.answer,
+        mistake:
+          "Backend is not reachable, so this is the local MVP result. Try to answer with a full sentence using words from the story.",
+        coachTip:
+          "Listen once more, then repeat the correct answer slowly and clearly.",
+      };
+
+      setResultData(fallbackResult);
+      await saveReadingListeningActivity(fallbackResult);
+    }
+  };
+
+  const handleDynamicSpeaking = async () => {
+    if (repeatState === "recording") {
+      const repeatAnswer = resultData.correction || selectedQuestion.answer;
+
+      await checkAnswerWithBackend(repeatAnswer);
+
       setRepeatState("saved");
       setShowResultPopup(true);
-      await saveReadingListeningActivity(repeatResult);
       return;
     }
 
@@ -507,22 +560,12 @@ export default function ReadingListeningScreen() {
     }
 
     if (practiceState === "recording") {
-      const newResult: ResultData = {
-        score: 76,
-        listeningScore: 80,
-        speakingScore: 72,
-        repeatAccuracy: 74,
-        correction: selectedQuestion.answer,
-        mistake:
-          "Try to answer with a full sentence using words from the story.",
-        coachTip:
-          "Good attempt. Listen once more, then repeat the answer clearly.",
-      };
+      const simulatedUserAnswer = selectedQuestion.answer;
 
-      setResultData(newResult);
+      await checkAnswerWithBackend(simulatedUserAnswer);
+
       setPracticeState("checked");
       setShowResultPopup(true);
-      await saveReadingListeningActivity(newResult);
       return;
     }
 
@@ -555,7 +598,6 @@ export default function ReadingListeningScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -570,7 +612,6 @@ export default function ReadingListeningScreen() {
           <View style={styles.emptyBox} />
         </View>
 
-        {/* Story List */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Stories List</Text>
         </View>
@@ -604,7 +645,6 @@ export default function ReadingListeningScreen() {
           })}
         </ScrollView>
 
-        {/* One Clean Story Card */}
         <View style={styles.storyCard}>
           <Text style={styles.storyTitle}>{selectedStory.title}</Text>
 
@@ -668,8 +708,8 @@ export default function ReadingListeningScreen() {
               style={[
                 styles.micCircle,
                 isRecording && {
-                  backgroundColor: "#DC2626",
-                  borderColor: "#DC2626",
+                  backgroundColor: RECORDING_COLOR,
+                  borderColor: RECORDING_COLOR,
                   transform: [{ scale: pulseAnim }],
                 },
               ]}
@@ -757,7 +797,6 @@ export default function ReadingListeningScreen() {
         </View>
       </ScrollView>
 
-      {/* Results Popup */}
       <Modal
         visible={showResultPopup}
         transparent
@@ -816,13 +855,20 @@ export default function ReadingListeningScreen() {
                 </View>
               </View>
 
+              <View style={styles.userAnswerBox}>
+                <Text style={styles.userAnswerLabel}>Your Answer</Text>
+                <Text style={styles.userAnswerText}>
+                  {resultData.userAnswer || "No answer recorded"}
+                </Text>
+              </View>
+
               <View style={styles.resultBox}>
-                <Text style={styles.resultLabel}>Correct Answer</Text>
-                <Text style={styles.resultText}>{selectedQuestion.answer}</Text>
+                <Text style={styles.resultLabel}>Corrected Answer</Text>
+                <Text style={styles.resultText}>{resultData.correction}</Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(selectedQuestion.answer)}
+                  onPress={() => speakText(resultData.correction)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -1117,7 +1163,7 @@ const styles = StyleSheet.create({
   waveBar: {
     width: 7,
     borderRadius: 999,
-    backgroundColor: "#DC2626",
+    backgroundColor: RECORDING_COLOR,
   },
 
   statusTextBox: {
@@ -1172,7 +1218,7 @@ const styles = StyleSheet.create({
   },
 
   recordingButton: {
-    backgroundColor: "#DC2626",
+    backgroundColor: RECORDING_COLOR,
   },
 
   speakButtonText: {
@@ -1287,6 +1333,29 @@ const styles = StyleSheet.create({
   scoreLabel: {
     fontSize: 11,
     color: "#334155",
+    fontWeight: "900",
+  },
+
+  userAnswerBox: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    marginBottom: 10,
+  },
+
+  userAnswerLabel: {
+    fontSize: 12,
+    color: "#991B1B",
+    fontWeight: "900",
+    marginBottom: 5,
+  },
+
+  userAnswerText: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: "#991B1B",
     fontWeight: "900",
   },
 

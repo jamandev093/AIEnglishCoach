@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 
+import { analyzeSentenceWithBackend } from "../config/api";
 import { addActivity } from "../utils/activityHistory";
 
 import {
@@ -57,6 +58,18 @@ type StoryTask = {
   englishMeaning: string;
   meaningHindi: string;
   meaningBengali: string;
+  mistake: string;
+  correction: string;
+  teacherExplanation: string;
+  smartSuggestion: string;
+};
+
+type StoryResultData = {
+  userStory: string;
+  betterStory: string;
+  score: number;
+  fluency: number;
+  confidence: number;
   mistake: string;
   correction: string;
   teacherExplanation: string;
@@ -224,7 +237,18 @@ export default function StoriesScreen() {
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
-  const [userStory, setUserStory] = useState("");
+
+  const [resultData, setResultData] = useState<StoryResultData>({
+    userStory: "",
+    betterStory: storyTasks[0].correctStory,
+    score: 70,
+    fluency: 64,
+    confidence: 68,
+    mistake: storyTasks[0].mistake,
+    correction: storyTasks[0].correction,
+    teacherExplanation: storyTasks[0].teacherExplanation,
+    smartSuggestion: storyTasks[0].smartSuggestion,
+  });
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(12)).current;
@@ -338,14 +362,7 @@ export default function StoriesScreen() {
       pulseLoop.stop();
       waveLoop.stop();
     };
-  }, [
-    isRecording,
-    pulseAnim,
-    barOne,
-    barTwo,
-    barThree,
-    barFour,
-  ]);
+  }, [isRecording, pulseAnim, barOne, barTwo, barThree, barFour]);
 
   const displayLanguage = getDisplayLanguage(profile, settings);
   const languageModeLabel = getLanguageModeLabel(profile, settings);
@@ -354,14 +371,6 @@ export default function StoriesScreen() {
     if (displayLanguage === "Bengali") return selectedStory.meaningBengali;
     if (displayLanguage === "Hindi") return selectedStory.meaningHindi;
     return selectedStory.englishMeaning;
-  };
-
-  const getScore = () => {
-    if (!userStory.trim()) return 0;
-
-    if (selectedStory.level === "Beginner") return 70;
-    if (selectedStory.level === "Intermediate") return 68;
-    return 65;
   };
 
   const speakText = (text: string) => {
@@ -374,19 +383,88 @@ export default function StoriesScreen() {
     });
   };
 
+  const getDefaultResult = (story: StoryTask): StoryResultData => {
+    return {
+      userStory: "",
+      betterStory: story.correctStory,
+      score:
+        story.level === "Beginner" ? 70 : story.level === "Intermediate" ? 68 : 65,
+      fluency: 64,
+      confidence: 68,
+      mistake: story.mistake,
+      correction: story.correction,
+      teacherExplanation: story.teacherExplanation,
+      smartSuggestion: story.smartSuggestion,
+    };
+  };
+
   const chooseStory = (story: StoryTask) => {
     Speech.stop();
     setSelectedStory(story);
     setPracticeState("idle");
     setRepeatState("idle");
     setShowResultPopup(false);
-    setUserStory("");
+    setResultData(getDefaultResult(story));
+  };
+
+  const analyzeStoryWithBackend = async (spokenStory: string) => {
+    try {
+      const backendResult = await analyzeSentenceWithBackend(spokenStory);
+
+      const backendHasUsefulCorrection =
+        backendResult.correctedText &&
+        backendResult.correctedText.trim().toLowerCase() !==
+          spokenStory.trim().toLowerCase();
+
+      const backendMistakes =
+        backendResult.mistakes && backendResult.mistakes.length > 0
+          ? backendResult.mistakes.join(", ")
+          : "";
+
+      const nextResult: StoryResultData = {
+        userStory: backendResult.originalText || spokenStory,
+        betterStory: backendHasUsefulCorrection
+          ? backendResult.correctedText
+          : selectedStory.correctStory,
+        score: backendResult.score || getDefaultResult(selectedStory).score,
+        fluency:
+          backendResult.fluencyScore ||
+          Math.max((backendResult.score || 70) - 8, 0),
+        confidence:
+          backendResult.confidenceScore ||
+          Math.max((backendResult.score || 70) - 5, 0),
+        mistake: backendMistakes || selectedStory.mistake,
+        correction: backendResult.simpleExplanation || selectedStory.correction,
+        teacherExplanation:
+          backendResult.teacherExplanation || selectedStory.teacherExplanation,
+        smartSuggestion:
+          backendResult.smartSuggestion ||
+          backendResult.coachReply ||
+          selectedStory.smartSuggestion,
+      };
+
+      setResultData(nextResult);
+      return nextResult;
+    } catch (error) {
+      console.log("Stories backend error:", error);
+
+      const fallbackResult: StoryResultData = {
+        ...getDefaultResult(selectedStory),
+        userStory: spokenStory,
+        correction:
+          "Backend is not reachable, so this is the local MVP story correction.",
+      };
+
+      setResultData(fallbackResult);
+      return fallbackResult;
+    }
   };
 
   const stopAndAnalyzeStory = async () => {
     const simulatedStory = selectedStory.sampleUserStory;
 
-    setUserStory(simulatedStory);
+    const analyzedResult = await analyzeStoryWithBackend(simulatedStory);
+
     setPracticeState("completed");
     setShowResultPopup(true);
 
@@ -394,12 +472,12 @@ export default function StoriesScreen() {
       await addActivity({
         type: "stories",
         title: selectedStory.title,
-        detail: `Story attempt: ${simulatedStory}`,
-        score: selectedStory.level === "Beginner" ? 70 : selectedStory.level === "Intermediate" ? 68 : 65,
-        confidence: 68,
-        fluency: 64,
-        mistake: selectedStory.mistake,
-        correctedSentence: selectedStory.correctStory,
+        detail: `Story attempt: ${analyzedResult.userStory}`,
+        score: analyzedResult.score,
+        confidence: analyzedResult.confidence,
+        fluency: analyzedResult.fluency,
+        mistake: analyzedResult.mistake,
+        correctedSentence: analyzedResult.betterStory,
       });
     } catch (error) {
       console.log("Failed to save story activity:", error);
@@ -408,17 +486,19 @@ export default function StoriesScreen() {
 
   const handleMainStoryButton = async () => {
     if (repeatState === "recording") {
+      const repeatResult = await analyzeStoryWithBackend(resultData.betterStory);
+
       setRepeatState("saved");
 
       try {
         await addActivity({
           type: "stories",
           title: "Story repeat practice",
-          detail: `Repeated story: ${selectedStory.correctStory}`,
-          score: 82,
-          confidence: 72,
-          fluency: 70,
-          correctedSentence: selectedStory.correctStory,
+          detail: `Repeated story: ${repeatResult.betterStory}`,
+          score: Math.min(repeatResult.score + 8, 100),
+          confidence: Math.min(repeatResult.confidence + 6, 100),
+          fluency: Math.min(repeatResult.fluency + 6, 100),
+          correctedSentence: repeatResult.betterStory,
         });
       } catch (error) {
         console.log("Failed to save story repeat activity:", error);
@@ -430,7 +510,7 @@ export default function StoriesScreen() {
     if (repeatState === "saved") {
       setRepeatState("idle");
       setPracticeState("idle");
-      setUserStory("");
+      setResultData(getDefaultResult(selectedStory));
       return;
     }
 
@@ -461,7 +541,7 @@ export default function StoriesScreen() {
     setPracticeState("idle");
     setRepeatState("idle");
     setShowResultPopup(false);
-    setUserStory("");
+    setResultData(getDefaultResult(selectedStory));
   };
 
   const openLiveStory = () => {
@@ -494,7 +574,6 @@ export default function StoriesScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -509,7 +588,6 @@ export default function StoriesScreen() {
           <View style={styles.emptyBox} />
         </View>
 
-        {/* Story Selector */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Choose Story</Text>
         </View>
@@ -547,7 +625,6 @@ export default function StoriesScreen() {
           })}
         </ScrollView>
 
-        {/* Picture Story */}
         <View style={styles.imageStoryCard}>
           <View style={styles.cardTopRow}>
             <View>
@@ -608,7 +685,6 @@ export default function StoriesScreen() {
           </View>
         </View>
 
-        {/* Tell Story */}
         <View style={styles.speakCard}>
           <View style={styles.speakTopRow}>
             <View style={styles.speakTextBox}>
@@ -712,7 +788,6 @@ export default function StoriesScreen() {
         </View>
       </ScrollView>
 
-      {/* Result Popup */}
       <Modal
         visible={showResultPopup}
         transparent
@@ -754,17 +829,17 @@ export default function StoriesScreen() {
 
               <View style={styles.scoreGrid}>
                 <View style={styles.scoreMiniBox}>
-                  <Text style={styles.scoreValue}>{getScore()}%</Text>
+                  <Text style={styles.scoreValue}>{resultData.score}%</Text>
                   <Text style={styles.scoreLabel}>Story</Text>
                 </View>
 
                 <View style={styles.scoreMiniBox}>
-                  <Text style={styles.scoreValue}>64%</Text>
+                  <Text style={styles.scoreValue}>{resultData.fluency}%</Text>
                   <Text style={styles.scoreLabel}>Fluency</Text>
                 </View>
 
                 <View style={styles.scoreMiniBox}>
-                  <Text style={styles.scoreValue}>68%</Text>
+                  <Text style={styles.scoreValue}>{resultData.confidence}%</Text>
                   <Text style={styles.scoreLabel}>Confidence</Text>
                 </View>
               </View>
@@ -772,17 +847,17 @@ export default function StoriesScreen() {
               <View style={styles.userAnswerBox}>
                 <Text style={styles.userAnswerLabel}>Your answer</Text>
                 <Text style={styles.userAnswerText}>
-                  {userStory || selectedStory.sampleUserStory}
+                  {resultData.userStory || selectedStory.sampleUserStory}
                 </Text>
               </View>
 
               <View style={styles.correctBox}>
                 <Text style={styles.correctLabel}>Better story</Text>
-                <Text style={styles.correctText}>{selectedStory.correctStory}</Text>
+                <Text style={styles.correctText}>{resultData.betterStory}</Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(selectedStory.correctStory)}
+                  onPress={() => speakText(resultData.betterStory)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -804,7 +879,7 @@ export default function StoriesScreen() {
                   <Text style={styles.modalInfoTitle}>Mistakes Found</Text>
                 </View>
 
-                <Text style={styles.modalInfoText}>{selectedStory.mistake}</Text>
+                <Text style={styles.modalInfoText}>{resultData.mistake}</Text>
               </View>
 
               <View style={styles.modalInfoBox}>
@@ -817,7 +892,7 @@ export default function StoriesScreen() {
                   <Text style={styles.modalInfoTitle}>Correction</Text>
                 </View>
 
-                <Text style={styles.modalInfoText}>{selectedStory.correction}</Text>
+                <Text style={styles.modalInfoText}>{resultData.correction}</Text>
               </View>
 
               <View style={styles.teacherBox}>
@@ -831,7 +906,7 @@ export default function StoriesScreen() {
                 </View>
 
                 <Text style={styles.modalInfoText}>
-                  {selectedStory.teacherExplanation}
+                  {resultData.teacherExplanation}
                 </Text>
               </View>
 
@@ -852,12 +927,12 @@ export default function StoriesScreen() {
               <View style={styles.suggestionBox}>
                 <Text style={styles.modalSectionTitle}>Smart Suggestion</Text>
                 <Text style={styles.suggestionText}>
-                  {selectedStory.smartSuggestion}
+                  {resultData.smartSuggestion}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(selectedStory.smartSuggestion)}
+                  onPress={() => speakText(resultData.smartSuggestion)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -886,7 +961,7 @@ export default function StoriesScreen() {
 
                 <View style={styles.modalRepeatSentenceBox}>
                   <Text style={styles.modalRepeatSentence}>
-                    {selectedStory.correctStory}
+                    {resultData.betterStory}
                   </Text>
                 </View>
               </View>
@@ -895,7 +970,7 @@ export default function StoriesScreen() {
             <View style={styles.modalActionRow}>
               <TouchableOpacity
                 style={styles.modalLightButton}
-                onPress={() => speakText(selectedStory.correctStory)}
+                onPress={() => speakText(resultData.betterStory)}
                 activeOpacity={0.85}
               >
                 <Ionicons
