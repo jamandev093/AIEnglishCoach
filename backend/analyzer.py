@@ -5,6 +5,10 @@ def _clean_text(text: str) -> str:
     return " ".join(text.strip().split())
 
 
+def _make_score(value: int) -> int:
+    return max(0, min(value, 100))
+
+
 def _base_response(
     original_text: str,
     corrected_text: str,
@@ -14,21 +18,23 @@ def _base_response(
     score: int,
     smart_suggestion: str,
 ) -> Dict:
+    safe_score = _make_score(score)
+
     return {
         "success": True,
         "originalText": original_text,
         "correctedText": corrected_text,
         "improved": corrected_text,
-        "score": score,
+        "score": safe_score,
         "mistakes": mistakes,
         "simpleExplanation": simple_explanation,
         "teacherExplanation": teacher_explanation,
         "smartSuggestion": smart_suggestion,
         "repeatSentence": corrected_text,
-        "confidenceScore": max(score - 5, 0),
-        "fluencyScore": max(score - 8, 0),
-        "pronunciationScore": max(score - 10, 0),
-        "coachReply": "Good try. Repeat the improved sentence slowly and clearly.",
+        "confidenceScore": _make_score(safe_score - 2),
+        "fluencyScore": _make_score(safe_score - 4),
+        "pronunciationScore": _make_score(safe_score),
+        "coachReply": f"Good try. Repeat this slowly: {corrected_text}",
     }
 
 
@@ -66,6 +72,17 @@ def analyze_sentence(text: str) -> Dict:
             smart_suggestion="Yesterday, I went to the market to buy vegetables.",
         )
 
+    if lower == "i go school every day":
+        return _base_response(
+            original_text=user_text,
+            corrected_text="I go to school every day.",
+            mistakes=["Missing “to”"],
+            simple_explanation="When you go to a place, use “to”. Say “go to school”.",
+            teacher_explanation="The verb “go” is usually followed by “to” before a place. The correct pattern is: subject + go/goes + to + place.",
+            score=74,
+            smart_suggestion="I go to school every day by bus.",
+        )
+
     if lower == "she go school":
         return _base_response(
             original_text=user_text,
@@ -97,6 +114,50 @@ def analyze_sentence(text: str) -> Dict:
             teacher_explanation="The correct pattern is: want + to + verb. So we say “I want to buy”.",
             score=66,
             smart_suggestion="I want to buy some fresh vegetables from the market.",
+        )
+
+    if lower == "i learning english":
+        return _base_response(
+            original_text=user_text,
+            corrected_text="I am learning English.",
+            mistakes=["Missing “am”"],
+            simple_explanation="For an action happening now, say “I am learning”.",
+            teacher_explanation="Use present continuous tense for an action happening now: subject + am/is/are + verb-ing.",
+            score=70,
+            smart_suggestion="I am learning English to speak with confidence.",
+        )
+
+    if lower == "can you repeat slow":
+        return _base_response(
+            original_text=user_text,
+            corrected_text="Could you repeat that slowly?",
+            mistakes=["Less natural phrase", "Adverb form"],
+            simple_explanation="Say “slowly” instead of “slow”. “Could you” is more polite.",
+            teacher_explanation="Use the adverb “slowly” to describe how someone repeats. “Could you” is a polite request form.",
+            score=76,
+            smart_suggestion="Could you repeat that slowly, please?",
+        )
+
+    if lower == "he wake up then he brush teeth then he go school":
+        return _base_response(
+            original_text=user_text,
+            corrected_text="He wakes up, brushes his teeth, and goes to school.",
+            mistakes=["Verb form", "Missing connector words"],
+            simple_explanation="With “he”, use wakes, brushes, and goes.",
+            teacher_explanation="In simple present tense, he/she/it usually takes -s or -es on the verb.",
+            score=69,
+            smart_suggestion="First, he wakes up. Then he brushes his teeth. After that, he goes to school.",
+        )
+
+    if lower == "she go market she buy vegetable she come home":
+        return _base_response(
+            original_text=user_text,
+            corrected_text="She goes to the market, buys vegetables, and comes home.",
+            mistakes=["Verb form", "Missing “to”", "Plural noun"],
+            simple_explanation="With “she”, use goes, buys, and comes. Say “goes to the market”.",
+            teacher_explanation="For he/she/it in simple present tense, add -s or -es to the verb. Also use “to” before a place.",
+            score=68,
+            smart_suggestion="First, she goes to the market. Then she buys vegetables. Finally, she comes home.",
         )
 
     if lower == "teacher asking why i absent yesterday":

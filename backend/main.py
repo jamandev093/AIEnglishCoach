@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -29,6 +29,7 @@ def root():
     return {
         "success": True,
         "message": "AI English Coach backend is running 🚀",
+        "version": "1.0.0",
     }
 
 
@@ -43,16 +44,28 @@ def health_check():
 
 @app.post("/analyze")
 def analyze_text(request: AnalyzeRequest):
-    result = analyze_sentence(request.text)
-    return result
+    text = request.text.strip()
+
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    try:
+        return analyze_sentence(text)
+    except Exception as error:
+        print("Analyze error:", error)
+        raise HTTPException(status_code=500, detail="Analyze failed")
 
 
 @app.post("/speech/analyze")
 async def analyze_speech(file: UploadFile = File(...)):
-    transcribed_text = fake_transcribe_audio(file.filename)
-    result = analyze_sentence(transcribed_text)
+    try:
+        transcribed_text = fake_transcribe_audio(file.filename)
+        result = analyze_sentence(transcribed_text)
 
-    result["audioFileName"] = file.filename
-    result["transcribedText"] = transcribed_text
+        result["audioFileName"] = file.filename
+        result["transcribedText"] = transcribed_text
 
-    return result
+        return result
+    except Exception as error:
+        print("Speech analyze error:", error)
+        raise HTTPException(status_code=500, detail="Speech analyze failed")
