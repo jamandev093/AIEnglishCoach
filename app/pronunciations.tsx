@@ -17,13 +17,13 @@ import { addActivity } from "../src/utils/activityHistory";
 import {
   defaultProfile,
   getProfile,
-  ProfileData,
+  type ProfileData,
 } from "../src/utils/profileStore";
 
 import {
-  AppSettings,
   defaultSettings,
   getSettings,
+  type AppSettings,
 } from "../src/utils/settingsStore";
 
 import {
@@ -32,7 +32,7 @@ import {
 } from "../src/utils/languageMode";
 
 type PracticeState = "idle" | "recording" | "checked";
-type RepeatState = "idle" | "repeat" | "saved";
+type RepeatState = "idle" | "recording" | "saved";
 
 type WordMeaning = {
   word: string;
@@ -53,7 +53,20 @@ type PracticeSentence = {
   smartSuggestion: string;
 };
 
+type PronunciationResult = {
+  fluencyScore: number;
+  confidenceScore: number;
+  speakingScore: number;
+  targetSentence: string;
+  feedback: string;
+  mistakeFocus: string;
+  correctionTip: string;
+  smartSuggestion: string;
+  repeatSentence: string;
+};
+
 const ACTION_COLOR = "#8499DC";
+const RECORDING_COLOR = "#DC2626";
 
 const practiceSentences: PracticeSentence[] = [
   {
@@ -133,6 +146,21 @@ const practiceSentences: PracticeSentence[] = [
   },
 ];
 
+function buildResult(sentence: PracticeSentence): PronunciationResult {
+  return {
+    fluencyScore: 72,
+    confidenceScore: 74,
+    speakingScore: 78,
+    targetSentence: sentence.sentence,
+    feedback:
+      "Good practice. Your speaking clarity is improving. Now repeat the sentence again and focus on the sound carefully.",
+    mistakeFocus: sentence.focusSound,
+    correctionTip: sentence.correctionTip,
+    smartSuggestion: sentence.smartSuggestion,
+    repeatSentence: sentence.sentence,
+  };
+}
+
 export default function PronunciationsScreen() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -144,6 +172,9 @@ export default function PronunciationsScreen() {
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
+  const [resultData, setResultData] = useState<PronunciationResult>(
+    buildResult(practiceSentences[0])
+  );
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(12)).current;
@@ -152,21 +183,26 @@ export default function PronunciationsScreen() {
   const barFour = useRef(new Animated.Value(31)).current;
   const barFive = useRef(new Animated.Value(20)).current;
 
+  const isListening =
+    practiceState === "recording" || repeatState === "recording";
+
   useFocusEffect(
     useCallback(() => {
       const loadProfileAndSettings = async () => {
-        const savedProfile = await getProfile();
-        const savedSettings = await getSettings();
+        try {
+          const savedProfile = await getProfile();
+          const savedSettings = await getSettings();
 
-        setProfile(savedProfile);
-        setSettings(savedSettings);
+          setProfile(savedProfile);
+          setSettings(savedSettings);
+        } catch (error) {
+          console.log("Failed to load Pronunciation settings:", error);
+        }
       };
 
       loadProfileAndSettings();
     }, [])
   );
-
-  const isListening = practiceState === "recording" || repeatState === "repeat";
 
   useEffect(() => {
     if (!isListening) {
@@ -306,40 +342,50 @@ export default function PronunciationsScreen() {
   };
 
   const chooseSentence = (sentence: PracticeSentence) => {
+    Speech.stop();
     setSelectedSentence(sentence);
     setPracticeState("idle");
     setRepeatState("idle");
     setShowResultPopup(false);
+    setResultData(buildResult(sentence));
   };
 
-  const savePronunciationActivity = async () => {
-    await addActivity({
-      type: "pronunciation",
-      title: "Pronunciation practice",
-      detail: `Repeated: ${selectedSentence.sentence}`,
-      score: 78,
-      confidence: 66,
-      fluency: 64,
-      mistake: selectedSentence.correctionTip,
-      correctedSentence: selectedSentence.sentence,
-    });
+  const savePronunciationActivity = async (data: PronunciationResult) => {
+    try {
+      await addActivity({
+        type: "pronunciation",
+        title: "Pronunciation practice",
+        detail: `Practiced: ${data.targetSentence}`,
+        score: data.speakingScore,
+        confidence: data.confidenceScore,
+        fluency: data.fluencyScore,
+        mistake: data.correctionTip,
+        correctedSentence: data.targetSentence,
+      });
+    } catch (error) {
+      console.log("Failed to save pronunciation activity:", error);
+    }
   };
 
   const saveRepeatLoopActivity = async () => {
-    await addActivity({
-      type: "pronunciation",
-      title: "Repeat after me correction",
-      detail: `Repeated correction: ${selectedSentence.sentence}`,
-      score: 82,
-      confidence: 68,
-      fluency: 67,
-      mistake: selectedSentence.correctionTip,
-      correctedSentence: selectedSentence.sentence,
-    });
+    try {
+      await addActivity({
+        type: "pronunciation",
+        title: "Pronunciation repeat practice",
+        detail: `Repeated: ${resultData.repeatSentence}`,
+        score: Math.min(resultData.speakingScore + 4, 100),
+        confidence: Math.min(resultData.confidenceScore + 4, 100),
+        fluency: Math.min(resultData.fluencyScore + 4, 100),
+        mistake: resultData.correctionTip,
+        correctedSentence: resultData.repeatSentence,
+      });
+    } catch (error) {
+      console.log("Failed to save pronunciation repeat:", error);
+    }
   };
 
   const handleMainButton = async () => {
-    if (repeatState === "repeat") {
+    if (repeatState === "recording") {
       setRepeatState("saved");
       await saveRepeatLoopActivity();
       return;
@@ -357,23 +403,29 @@ export default function PronunciationsScreen() {
     }
 
     if (practiceState === "recording") {
+      const result = buildResult(selectedSentence);
+
+      setResultData(result);
       setPracticeState("checked");
       setShowResultPopup(true);
-      await savePronunciationActivity();
+
+      await savePronunciationActivity(result);
       return;
     }
 
-    setPracticeState("recording");
+    if (practiceState === "checked") {
+      setPracticeState("recording");
+    }
   };
 
   const startRepeatFromPopup = () => {
     setShowResultPopup(false);
     setPracticeState("idle");
-    setRepeatState("repeat");
+    setRepeatState("recording");
   };
 
   const getMainButtonText = () => {
-    if (repeatState === "repeat") return "Stop & Save Repeat";
+    if (repeatState === "recording") return "Save Repeat";
     if (repeatState === "saved") return "Practice Again";
     if (practiceState === "idle") return "Start Practice";
     if (practiceState === "recording") return "Stop & Check";
@@ -381,7 +433,7 @@ export default function PronunciationsScreen() {
   };
 
   const getMainButtonIcon = (): keyof typeof Ionicons.glyphMap => {
-    if (repeatState === "repeat") return "stop";
+    if (repeatState === "recording") return "checkmark-outline";
     if (repeatState === "saved") return "refresh-outline";
     if (practiceState === "idle") return "mic-outline";
     if (practiceState === "recording") return "stop";
@@ -389,7 +441,7 @@ export default function PronunciationsScreen() {
   };
 
   const getRecordingTitle = () => {
-    if (repeatState === "repeat") return "Repeat after me";
+    if (repeatState === "recording") return "Repeat after me";
     if (repeatState === "saved") return "Repeat saved";
     if (practiceState === "idle") return "Ready to speak";
     if (practiceState === "recording") return "Listening...";
@@ -397,7 +449,7 @@ export default function PronunciationsScreen() {
   };
 
   const getRecordingText = () => {
-    if (repeatState === "repeat") {
+    if (repeatState === "recording") {
       return "Say the corrected sentence again. Focus on the correction from the popup.";
     }
 
@@ -423,11 +475,11 @@ export default function PronunciationsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
+            activeOpacity={0.85}
           >
             <Ionicons name="arrow-back" size={22} color="#0F172A" />
           </TouchableOpacity>
@@ -437,7 +489,6 @@ export default function PronunciationsScreen() {
           <View style={styles.emptyBox} />
         </View>
 
-        {/* Suggested Sentences */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Suggested Sentences</Text>
         </View>
@@ -473,7 +524,6 @@ export default function PronunciationsScreen() {
           })}
         </ScrollView>
 
-        {/* Main Practice Card */}
         <View style={styles.practiceCard}>
           <View style={styles.practiceTopRow}>
             <View style={styles.practiceTitleBox}>
@@ -507,20 +557,23 @@ export default function PronunciationsScreen() {
           </View>
 
           <View
-            style={[styles.recordingBox, isListening && styles.recordingBoxActive]}
+            style={[
+              styles.recordingBox,
+              isListening && styles.recordingBoxActive,
+            ]}
           >
             <Animated.View
               style={[
                 styles.micCircle,
                 isListening && {
-                  backgroundColor: ACTION_COLOR,
-                  borderColor: ACTION_COLOR,
+                  backgroundColor: RECORDING_COLOR,
+                  borderColor: RECORDING_COLOR,
                   transform: [{ scale: pulseAnim }],
                 },
               ]}
             >
               <Ionicons
-                name={isListening ? "mic" : "mic-outline"}
+                name={isListening ? "radio-button-on" : "mic-outline"}
                 size={32}
                 color={isListening ? "#FFFFFF" : ACTION_COLOR}
               />
@@ -550,7 +603,7 @@ export default function PronunciationsScreen() {
             <Text style={styles.mainButtonText}>{getMainButtonText()}</Text>
           </TouchableOpacity>
 
-          {practiceState === "checked" && repeatState !== "repeat" && (
+          {practiceState === "checked" && repeatState !== "recording" && (
             <TouchableOpacity
               style={styles.openResultButton}
               onPress={() => setShowResultPopup(true)}
@@ -572,42 +625,8 @@ export default function PronunciationsScreen() {
             </View>
           )}
         </View>
-
-        {/* Coming Soon */}
-        <View style={styles.futureCard}>
-          <View style={styles.futureHeaderRow}>
-            <View style={styles.futureIcon}>
-              <Ionicons name="sparkles-outline" size={22} color={ACTION_COLOR} />
-            </View>
-
-            <View style={styles.futureTitleBox}>
-              <Text style={styles.futureTitle}>Coming Soon</Text>
-              <Text style={styles.futureSubtitle}>
-                Real AI pronunciation scoring will connect after speech backend.
-              </Text>
-            </View>
-          </View>
-
-          {[
-            "Real microphone audio analysis",
-            "AI pronunciation clarity score",
-            "Fluency and repeat accuracy",
-            "Automatic mistake memory",
-            "Smarter sentence suggestions",
-          ].map((item) => (
-            <View key={item} style={styles.futureItemRow}>
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={18}
-                color={ACTION_COLOR}
-              />
-              <Text style={styles.futureItemText}>{item}</Text>
-            </View>
-          ))}
-        </View>
       </ScrollView>
 
-      {/* Standard Practice Result Popup */}
       <Modal
         visible={showResultPopup}
         transparent
@@ -635,6 +654,7 @@ export default function PronunciationsScreen() {
               <TouchableOpacity
                 style={styles.modalCloseButton}
                 onPress={() => setShowResultPopup(false)}
+                activeOpacity={0.85}
               >
                 <Ionicons name="close" size={21} color="#64748B" />
               </TouchableOpacity>
@@ -644,34 +664,39 @@ export default function PronunciationsScreen() {
               style={styles.modalScroll}
               showsVerticalScrollIndicator={false}
             >
-              {/* Scores */}
               <View style={styles.scoreGrid}>
                 <View style={styles.scoreBox}>
-                  <Text style={styles.scoreValue}>78%</Text>
-                  <Text style={styles.scoreLabel}>Clarity</Text>
-                </View>
-
-                <View style={styles.scoreBox}>
-                  <Text style={styles.scoreValue}>64%</Text>
+                  <Text style={styles.scoreValue}>
+                    {resultData.fluencyScore}%
+                  </Text>
                   <Text style={styles.scoreLabel}>Fluency</Text>
                 </View>
 
                 <View style={styles.scoreBox}>
-                  <Text style={styles.scoreValue}>82%</Text>
-                  <Text style={styles.scoreLabel}>Repeat</Text>
+                  <Text style={styles.scoreValue}>
+                    {resultData.confidenceScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Confidence</Text>
+                </View>
+
+                <View style={styles.scoreBox}>
+                  <Text style={styles.scoreValue}>
+                    {resultData.speakingScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Speaking</Text>
                 </View>
               </View>
 
-              {/* Target Sentence */}
               <View style={styles.modalSentenceBox}>
                 <Text style={styles.modalSectionTitle}>Target sentence</Text>
                 <Text style={styles.modalSentence}>
-                  {selectedSentence.sentence}
+                  {resultData.targetSentence}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(selectedSentence.sentence)}
+                  onPress={() => speakText(resultData.targetSentence)}
+                  activeOpacity={0.85}
                 >
                   <Ionicons
                     name="volume-high-outline"
@@ -682,7 +707,6 @@ export default function PronunciationsScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* AI Teacher Feedback */}
               <View style={styles.modalTeacherBox}>
                 <View style={styles.teacherIcon}>
                   <MaterialCommunityIcons
@@ -695,13 +719,12 @@ export default function PronunciationsScreen() {
                 <View style={styles.teacherTextBox}>
                   <Text style={styles.teacherTitle}>AI Teacher Feedback</Text>
                   <Text style={styles.teacherText}>
-                    Good practice. Your clarity is improving. Now repeat the
-                    sentence again and focus on: {selectedSentence.focusSound}.
+                    {resultData.feedback} Focus on:{" "}
+                    {resultData.mistakeFocus}.
                   </Text>
                 </View>
               </View>
 
-              {/* Mistake Memory */}
               <View style={styles.modalMemoryBox}>
                 <View style={styles.modalMemoryTopRow}>
                   <MaterialCommunityIcons
@@ -709,32 +732,31 @@ export default function PronunciationsScreen() {
                     size={23}
                     color={ACTION_COLOR}
                   />
-                  <Text style={styles.modalMemoryTitle}>Mistake Memory</Text>
+                  <Text style={styles.modalMemoryTitle}>Mistake / Focus</Text>
                 </View>
 
                 <Text style={styles.modalMemoryLabel}>Current focus sound</Text>
                 <Text style={styles.modalMemoryValue}>
-                  {selectedSentence.focusSound}
+                  {resultData.mistakeFocus}
                 </Text>
 
                 <Text style={styles.modalMemoryText}>
-                  This pronunciation focus was saved to Progress. Later AI will
-                  remember repeated sound mistakes automatically.
+                  {resultData.correctionTip}
                 </Text>
               </View>
 
-              {/* Smart Suggestion */}
               <View style={styles.modalSuggestionBox}>
                 <Text style={styles.modalSectionTitle}>
                   Smart sentence suggestion
                 </Text>
                 <Text style={styles.modalSuggestionText}>
-                  {selectedSentence.smartSuggestion}
+                  {resultData.smartSuggestion}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(selectedSentence.smartSuggestion)}
+                  onPress={() => speakText(resultData.smartSuggestion)}
+                  activeOpacity={0.85}
                 >
                   <Ionicons
                     name="volume-high-outline"
@@ -745,7 +767,6 @@ export default function PronunciationsScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Repeat After Me Loop - Last Position */}
               <View style={styles.modalRepeatBox}>
                 <View style={styles.modalRepeatTopRow}>
                   <View style={styles.modalRepeatIcon}>
@@ -757,9 +778,7 @@ export default function PronunciationsScreen() {
                   </View>
 
                   <View style={styles.modalRepeatTextBox}>
-                    <Text style={styles.modalRepeatTitle}>
-                      Repeat After Me Loop
-                    </Text>
+                    <Text style={styles.modalRepeatTitle}>Repeat After Me</Text>
                     <Text style={styles.modalRepeatSubtitle}>
                       Last step: repeat the corrected sentence and save it to
                       Progress.
@@ -769,10 +788,10 @@ export default function PronunciationsScreen() {
 
                 <View style={styles.modalCorrectionBox}>
                   <Text style={styles.modalCorrectionLabel}>
-                    Correction focus
+                    Repeat sentence
                   </Text>
                   <Text style={styles.modalCorrectionText}>
-                    {selectedSentence.correctionTip}
+                    {resultData.repeatSentence}
                   </Text>
                 </View>
               </View>
@@ -781,7 +800,7 @@ export default function PronunciationsScreen() {
             <View style={styles.modalActionRow}>
               <TouchableOpacity
                 style={styles.modalLightButton}
-                onPress={() => speakText(selectedSentence.sentence)}
+                onPress={() => speakText(resultData.repeatSentence)}
                 activeOpacity={0.85}
               >
                 <Ionicons
@@ -798,7 +817,7 @@ export default function PronunciationsScreen() {
                 activeOpacity={0.85}
               >
                 <Ionicons name="mic-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.modalPrimaryButtonText}>Start Repeat</Text>
+                <Text style={styles.modalPrimaryButtonText}>Repeat</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -896,7 +915,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    marginBottom: 18,
+    marginBottom: 24,
   },
 
   practiceTopRow: {
@@ -995,8 +1014,8 @@ const styles = StyleSheet.create({
   },
 
   recordingBoxActive: {
-    backgroundColor: "#EEF2FF",
-    borderColor: "#C7D2FE",
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
   },
 
   micCircle: {
@@ -1028,7 +1047,7 @@ const styles = StyleSheet.create({
   waveBar: {
     width: 8,
     borderRadius: 999,
-    backgroundColor: ACTION_COLOR,
+    backgroundColor: RECORDING_COLOR,
   },
 
   recordingTitle: {
@@ -1057,7 +1076,7 @@ const styles = StyleSheet.create({
   },
 
   mainButtonRecording: {
-    backgroundColor: "#111827",
+    backgroundColor: RECORDING_COLOR,
   },
 
   mainButtonText: {
@@ -1102,64 +1121,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: "#166534",
     fontWeight: "800",
-  },
-
-  futureCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 24,
-  },
-
-  futureHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 13,
-  },
-
-  futureIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-
-  futureTitleBox: {
-    flex: 1,
-  },
-
-  futureTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#0F172A",
-    marginBottom: 3,
-  },
-
-  futureSubtitle: {
-    fontSize: 12,
-    color: "#64748B",
-    lineHeight: 18,
-    fontWeight: "600",
-  },
-
-  futureItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 9,
-  },
-
-  futureItemText: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 13,
-    lineHeight: 19,
-    color: "#334155",
-    fontWeight: "700",
   },
 
   modalOverlay: {
