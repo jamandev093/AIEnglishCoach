@@ -14,19 +14,22 @@ import {
   View,
 } from "react-native";
 
-import { analyzeSentenceWithBackend } from "../config/api";
+import {
+  analyzeSentenceWithBackend,
+  type AnalyzeApiResponse,
+} from "../config/api";
 import { addActivity } from "../utils/activityHistory";
 
 import {
   defaultProfile,
   getProfile,
-  ProfileData,
+  type ProfileData,
 } from "../utils/profileStore";
 
 import {
-  AppSettings,
   defaultSettings,
   getSettings,
+  type AppSettings,
 } from "../utils/settingsStore";
 
 import {
@@ -51,15 +54,18 @@ type SentenceTask = {
 type CheckResult = "idle" | "correct" | "wrong";
 type RepeatState = "idle" | "recording" | "saved";
 
-type BackendSentenceResult = {
+type SentenceResultData = {
   originalText: string;
   correctedText: string;
   score: number;
+  confidenceScore: number;
+  fluencyScore: number;
   mistakes: string[];
   simpleExplanation: string;
   teacherExplanation: string;
   smartSuggestion: string;
   repeatSentence: string;
+  usedBackend: boolean;
 };
 
 const ACTION_COLOR = "#8499DC";
@@ -110,6 +116,76 @@ const tasks: SentenceTask[] = [
   },
 ];
 
+function cleanSentence(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[.?!]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildFallbackResult(
+  task: SentenceTask,
+  typedSentence: string,
+  sentenceIsCorrect: boolean
+): SentenceResultData {
+  return {
+    originalText: typedSentence,
+    correctedText: task.correctSentence,
+    score: sentenceIsCorrect ? 90 : 55,
+    confidenceScore: sentenceIsCorrect ? 76 : 62,
+    fluencyScore: sentenceIsCorrect ? 74 : 60,
+    mistakes: sentenceIsCorrect
+      ? ["No major mistake found"]
+      : ["Word order / sentence pattern"],
+    simpleExplanation: task.simpleRule,
+    teacherExplanation: task.teacherExplanation,
+    smartSuggestion: task.smartSuggestion,
+    repeatSentence: task.correctSentence,
+    usedBackend: false,
+  };
+}
+
+function mapBackendResult(
+  task: SentenceTask,
+  typedSentence: string,
+  apiResult: AnalyzeApiResponse
+): SentenceResultData {
+  const backendScore =
+    typeof apiResult.score === "number" && !Number.isNaN(apiResult.score)
+      ? apiResult.score
+      : 70;
+
+  const correctedText =
+    apiResult.correctedText ||
+    apiResult.improved ||
+    apiResult.repeatSentence ||
+    task.correctSentence;
+
+  return {
+    originalText: apiResult.originalText || typedSentence,
+    correctedText,
+    score: backendScore,
+    confidenceScore:
+      typeof apiResult.confidenceScore === "number"
+        ? apiResult.confidenceScore
+        : Math.min(backendScore + 4, 100),
+    fluencyScore:
+      typeof apiResult.fluencyScore === "number"
+        ? apiResult.fluencyScore
+        : Math.max(backendScore - 4, 0),
+    mistakes:
+      Array.isArray(apiResult.mistakes) && apiResult.mistakes.length > 0
+        ? apiResult.mistakes
+        : ["No major mistake found"],
+    simpleExplanation: apiResult.simpleExplanation || task.simpleRule,
+    teacherExplanation: apiResult.teacherExplanation || task.teacherExplanation,
+    smartSuggestion: apiResult.smartSuggestion || task.smartSuggestion,
+    repeatSentence: apiResult.repeatSentence || correctedText,
+    usedBackend: true,
+  };
+}
+
 export default function SentenceBuildingScreen() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -119,14 +195,18 @@ export default function SentenceBuildingScreen() {
   const [result, setResult] = useState<CheckResult>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
-  const [backendResult, setBackendResult] =
-    useState<BackendSentenceResult | null>(null);
+  const [resultData, setResultData] = useState<SentenceResultData>(
+    buildFallbackResult(tasks[0], "", false)
+  );
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(12)).current;
   const barTwo = useRef(new Animated.Value(26)).current;
   const barThree = useRef(new Animated.Value(16)).current;
   const barFour = useRef(new Animated.Value(31)).current;
+
+  const isCorrect = result === "correct";
+  const builtSentence = typedSentence.trim();
 
   useFocusEffect(
     useCallback(() => {
@@ -236,34 +316,6 @@ export default function SentenceBuildingScreen() {
   const displayLanguage = getDisplayLanguage(profile, settings);
   const languageModeLabel = getLanguageModeLabel(profile, settings);
 
-  const builtSentence = typedSentence.trim();
-  const isCorrect = result === "correct";
-
-  const popupCorrectSentence =
-    backendResult?.correctedText || selectedTask.correctSentence;
-
-  const popupScore = backendResult?.score ?? (isCorrect ? 90 : 55);
-
-  const popupMistakes =
-    backendResult?.mistakes && backendResult.mistakes.length > 0
-      ? backendResult.mistakes
-      : isCorrect
-      ? ["No major mistake found"]
-      : ["Word order / sentence pattern"];
-
-  const popupCorrection = backendResult?.simpleExplanation || selectedTask.simpleRule;
-
-  const popupTeacherExplanation =
-    backendResult?.teacherExplanation || selectedTask.teacherExplanation;
-
-  const popupSmartSuggestion =
-    backendResult?.smartSuggestion || selectedTask.smartSuggestion;
-
-  const popupRepeatSentence =
-    backendResult?.repeatSentence ||
-    backendResult?.correctedText ||
-    selectedTask.correctSentence;
-
   const getTaskMeaning = () => {
     if (displayLanguage === "Bengali") return selectedTask.meaningBengali;
     if (displayLanguage === "Hindi") return selectedTask.meaningHindi;
@@ -307,7 +359,7 @@ export default function SentenceBuildingScreen() {
     setResult("idle");
     setShowResultPopup(false);
     setRepeatState("idle");
-    setBackendResult(null);
+    setResultData(buildFallbackResult(task, "", false));
   };
 
   const appendSuggestionWord = (word: string) => {
@@ -320,7 +372,6 @@ export default function SentenceBuildingScreen() {
 
     setResult("idle");
     setRepeatState("idle");
-    setBackendResult(null);
   };
 
   const removeLastWord = () => {
@@ -329,7 +380,6 @@ export default function SentenceBuildingScreen() {
     setTypedSentence(parts.join(" "));
     setResult("idle");
     setRepeatState("idle");
-    setBackendResult(null);
   };
 
   const resetTask = () => {
@@ -338,15 +388,7 @@ export default function SentenceBuildingScreen() {
     setResult("idle");
     setShowResultPopup(false);
     setRepeatState("idle");
-    setBackendResult(null);
-  };
-
-  const cleanSentence = (text: string) => {
-    return text
-      .toLowerCase()
-      .replace(/[.?!]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+    setResultData(buildFallbackResult(selectedTask, "", false));
   };
 
   const checkSentence = async () => {
@@ -363,35 +405,28 @@ export default function SentenceBuildingScreen() {
 
     try {
       const apiResult = await analyzeSentenceWithBackend(builtSentence);
+      const mappedResult = mapBackendResult(
+        selectedTask,
+        builtSentence,
+        apiResult
+      );
 
-      const mappedBackendResult: BackendSentenceResult = {
-        originalText: apiResult.originalText || builtSentence,
-        correctedText:
-          apiResult.correctedText ||
-          apiResult.improved ||
-          selectedTask.correctSentence,
-        score: apiResult.score || 0,
-        mistakes:
-          apiResult.mistakes && apiResult.mistakes.length > 0
-            ? apiResult.mistakes
-            : ["No major mistake found"],
-        simpleExplanation: apiResult.simpleExplanation || selectedTask.simpleRule,
-        teacherExplanation:
-          apiResult.teacherExplanation || selectedTask.teacherExplanation,
-        smartSuggestion: apiResult.smartSuggestion || selectedTask.smartSuggestion,
-        repeatSentence:
-          apiResult.repeatSentence ||
-          apiResult.correctedText ||
-          selectedTask.correctSentence,
-      };
-
-      setBackendResult(mappedBackendResult);
-
-      const cleanBackendCorrection = cleanSentence(mappedBackendResult.correctedText);
+      const cleanBackendCorrection = cleanSentence(mappedResult.correctedText);
 
       const sentenceIsCorrect =
         cleanBuilt === cleanCorrect || cleanBuilt === cleanBackendCorrection;
 
+      const finalResult: SentenceResultData = {
+        ...mappedResult,
+        score:
+          mappedResult.score > 0
+            ? mappedResult.score
+            : sentenceIsCorrect
+            ? 90
+            : 55,
+      };
+
+      setResultData(finalResult);
       setResult(sentenceIsCorrect ? "correct" : "wrong");
       setShowResultPopup(true);
 
@@ -400,45 +435,38 @@ export default function SentenceBuildingScreen() {
         title: sentenceIsCorrect
           ? "Sentence building"
           : "Sentence building correction",
-        detail: `Tried: ${builtSentence} → Correct: ${mappedBackendResult.correctedText}`,
-        score: mappedBackendResult.score,
-        confidence: sentenceIsCorrect ? 72 : 62,
-        fluency: sentenceIsCorrect ? 70 : 60,
-        mistake: mappedBackendResult.mistakes.join(", "),
-        correctedSentence: mappedBackendResult.correctedText,
+        detail: `Tried: ${builtSentence} → Correct: ${finalResult.correctedText}`,
+        score: finalResult.score,
+        confidence: finalResult.confidenceScore,
+        fluency: finalResult.fluencyScore,
+        mistake: finalResult.mistakes.join(", "),
+        correctedSentence: finalResult.correctedText,
       });
     } catch (error) {
-      console.log("Sentence backend error:", error);
+      console.log("Sentence backend fallback:", error);
 
-      if (cleanBuilt === cleanCorrect) {
-        setBackendResult(null);
-        setResult("correct");
-        setShowResultPopup(true);
+      const sentenceIsCorrect = cleanBuilt === cleanCorrect;
+      const fallbackResult = buildFallbackResult(
+        selectedTask,
+        builtSentence,
+        sentenceIsCorrect
+      );
 
-        await addActivity({
-          type: "sentenceBuilding",
-          title: "Sentence building",
-          detail: `Built correctly: ${selectedTask.correctSentence}`,
-          score: 90,
-          confidence: 70,
-          fluency: 68,
-          correctedSentence: selectedTask.correctSentence,
-        });
-
-        return;
-      }
-
-      setBackendResult(null);
-      setResult("wrong");
+      setResultData(fallbackResult);
+      setResult(sentenceIsCorrect ? "correct" : "wrong");
       setShowResultPopup(true);
 
       await addActivity({
         type: "sentenceBuilding",
-        title: "Sentence building correction",
-        detail: `Tried: ${builtSentence} → Correct: ${selectedTask.correctSentence}`,
-        score: 55,
-        mistake: "Word order / sentence pattern",
-        correctedSentence: selectedTask.correctSentence,
+        title: sentenceIsCorrect
+          ? "Sentence building"
+          : "Sentence building correction",
+        detail: `Tried: ${builtSentence} → Correct: ${fallbackResult.correctedText}`,
+        score: fallbackResult.score,
+        confidence: fallbackResult.confidenceScore,
+        fluency: fallbackResult.fluencyScore,
+        mistake: fallbackResult.mistakes.join(", "),
+        correctedSentence: fallbackResult.correctedText,
       });
     }
   };
@@ -461,11 +489,11 @@ export default function SentenceBuildingScreen() {
         await addActivity({
           type: "sentenceBuilding",
           title: "Sentence repeat practice",
-          detail: `Repeated: ${popupRepeatSentence}`,
+          detail: `Repeated: ${resultData.repeatSentence}`,
           score: 82,
           confidence: 72,
           fluency: 70,
-          correctedSentence: popupRepeatSentence,
+          correctedSentence: resultData.repeatSentence,
         });
       } catch (error) {
         console.log("Failed to save repeat activity:", error);
@@ -478,13 +506,13 @@ export default function SentenceBuildingScreen() {
   };
 
   const getSpeakButtonText = () => {
-    if (repeatState === "recording") return "Stop & Save";
+    if (repeatState === "recording") return "Save Repeat";
     if (repeatState === "saved") return "Practice Again";
     return "Speak";
   };
 
   const getSpeakButtonIcon = (): keyof typeof Ionicons.glyphMap => {
-    if (repeatState === "recording") return "stop";
+    if (repeatState === "recording") return "checkmark-outline";
     if (repeatState === "saved") return "refresh-outline";
     return "mic-outline";
   };
@@ -503,6 +531,8 @@ export default function SentenceBuildingScreen() {
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        bounces={false}
+        overScrollMode="never"
       >
         <View style={styles.header}>
           <TouchableOpacity
@@ -529,6 +559,8 @@ export default function SentenceBuildingScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.taskRow}
+          bounces={false}
+          overScrollMode="never"
         >
           {tasks.map((task) => {
             const active = task.title === selectedTask.title;
@@ -580,7 +612,6 @@ export default function SentenceBuildingScreen() {
               setTypedSentence(text);
               setResult("idle");
               setRepeatState("idle");
-              setBackendResult(null);
             }}
             placeholder="Type your sentence here..."
             placeholderTextColor="#94A3B8"
@@ -734,7 +765,7 @@ export default function SentenceBuildingScreen() {
           <View style={styles.listenSpeakActionRow}>
             <TouchableOpacity
               style={styles.listenButton}
-              onPress={() => speakText(popupCorrectSentence)}
+              onPress={() => speakText(resultData.correctedText)}
               activeOpacity={0.85}
             >
               <Ionicons
@@ -759,38 +790,6 @@ export default function SentenceBuildingScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        <View style={styles.futureCard}>
-          <View style={styles.futureHeaderRow}>
-            <View style={styles.futureIcon}>
-              <Ionicons name="sparkles-outline" size={22} color={ACTION_COLOR} />
-            </View>
-
-            <View style={styles.futureTitleBox}>
-              <Text style={styles.futureTitle}>Coming Soon</Text>
-              <Text style={styles.futureText}>
-                Later, AI will check your own sentence, remember your repeated
-                mistakes, and give smarter personal practice.
-              </Text>
-            </View>
-          </View>
-
-          {[
-            "AI sentence checking",
-            "Mistake memory from sentence patterns",
-            "Smart sentence suggestions",
-            "Activity history progress update",
-          ].map((item) => (
-            <View key={item} style={styles.futureItemRow}>
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={18}
-                color={ACTION_COLOR}
-              />
-              <Text style={styles.futureItemText}>{item}</Text>
-            </View>
-          ))}
         </View>
       </ScrollView>
 
@@ -834,6 +833,8 @@ export default function SentenceBuildingScreen() {
             <ScrollView
               style={styles.modalScroll}
               showsVerticalScrollIndicator={false}
+              bounces={false}
+              overScrollMode="never"
             >
               <View
                 style={[
@@ -866,10 +867,40 @@ export default function SentenceBuildingScreen() {
                 </Text>
               </View>
 
-              <View style={styles.modalScoreBox}>
-                <Text style={styles.modalScoreLabel}>Sentence score</Text>
-                <Text style={styles.modalScoreValue}>{popupScore}%</Text>
+              <View style={styles.scoreGrid}>
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>{resultData.score}%</Text>
+                  <Text style={styles.scoreLabel}>Sentence</Text>
+                </View>
+
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>
+                    {resultData.fluencyScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Fluency</Text>
+                </View>
+
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>
+                    {resultData.confidenceScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Confidence</Text>
+                </View>
               </View>
+
+              {!resultData.usedBackend && (
+                <View style={styles.fallbackNotice}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={18}
+                    color="#92400E"
+                  />
+                  <Text style={styles.fallbackNoticeText}>
+                    Local fallback result used. Backend connection can be tested
+                    again after this screen is stable.
+                  </Text>
+                </View>
+              )}
 
               <View
                 style={[
@@ -892,19 +923,19 @@ export default function SentenceBuildingScreen() {
                     isCorrect ? styles.modalGoodText : styles.modalWrongText,
                   ]}
                 >
-                  {builtSentence || "No sentence built"}
+                  {resultData.originalText || builtSentence || "No sentence built"}
                 </Text>
               </View>
 
               <View style={styles.modalCorrectBox}>
                 <Text style={styles.modalCorrectLabel}>Correct answer</Text>
                 <Text style={styles.modalCorrectText}>
-                  {popupCorrectSentence}
+                  {resultData.correctedText}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(popupCorrectSentence)}
+                  onPress={() => speakText(resultData.correctedText)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -933,9 +964,11 @@ export default function SentenceBuildingScreen() {
                   </Text>
                 </View>
 
-                <Text style={styles.modalMistakeText}>
-                  {popupMistakes.join(", ")}
-                </Text>
+                {resultData.mistakes.map((mistake) => (
+                  <Text key={mistake} style={styles.modalMistakeText}>
+                    • {mistake}
+                  </Text>
+                ))}
               </View>
 
               <View style={styles.modalRuleBox}>
@@ -948,7 +981,9 @@ export default function SentenceBuildingScreen() {
                   <Text style={styles.modalRuleTitle}>Correction</Text>
                 </View>
 
-                <Text style={styles.modalRuleText}>{popupCorrection}</Text>
+                <Text style={styles.modalRuleText}>
+                  {resultData.simpleExplanation}
+                </Text>
               </View>
 
               <View style={styles.teacherBox}>
@@ -962,7 +997,7 @@ export default function SentenceBuildingScreen() {
                 </View>
 
                 <Text style={styles.modalRuleText}>
-                  {popupTeacherExplanation}
+                  {resultData.teacherExplanation}
                 </Text>
               </View>
 
@@ -983,12 +1018,12 @@ export default function SentenceBuildingScreen() {
               <View style={styles.modalSuggestionBox}>
                 <Text style={styles.modalSectionTitle}>Smart Suggestion</Text>
                 <Text style={styles.modalSuggestionText}>
-                  {popupSmartSuggestion}
+                  {resultData.smartSuggestion}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
-                  onPress={() => speakText(popupSmartSuggestion)}
+                  onPress={() => speakText(resultData.smartSuggestion)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -1013,15 +1048,15 @@ export default function SentenceBuildingScreen() {
                   <View style={styles.modalRepeatTextBox}>
                     <Text style={styles.modalRepeatTitle}>Repeat It</Text>
                     <Text style={styles.modalRepeatSubtitle}>
-                      Tap Repeat It. The popup will close and speaking practice
-                      will start inside the Sentence Pattern card.
+                      Repeat the corrected sentence to build real speaking
+                      confidence.
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.modalRepeatSentenceBox}>
                   <Text style={styles.modalRepeatSentence}>
-                    {popupRepeatSentence}
+                    {resultData.repeatSentence}
                   </Text>
                 </View>
               </View>
@@ -1030,7 +1065,7 @@ export default function SentenceBuildingScreen() {
             <View style={styles.modalActionRow}>
               <TouchableOpacity
                 style={styles.modalLightButton}
-                onPress={() => speakText(popupCorrectSentence)}
+                onPress={() => speakText(resultData.correctedText)}
                 activeOpacity={0.85}
               >
                 <Ionicons
@@ -1164,7 +1199,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    marginBottom: 18,
+    marginBottom: 24,
   },
 
   builderTopRow: {
@@ -1497,64 +1532,6 @@ const styles = StyleSheet.create({
     marginLeft: 7,
   },
 
-  futureCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 24,
-  },
-
-  futureHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 13,
-  },
-
-  futureIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-
-  futureTitleBox: {
-    flex: 1,
-  },
-
-  futureTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#0F172A",
-    marginBottom: 5,
-  },
-
-  futureText: {
-    fontSize: 12,
-    color: "#64748B",
-    lineHeight: 18,
-    fontWeight: "600",
-  },
-
-  futureItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 9,
-  },
-
-  futureItemText: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 13,
-    lineHeight: 19,
-    color: "#334155",
-    fontWeight: "700",
-  },
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.45)",
@@ -1654,25 +1631,51 @@ const styles = StyleSheet.create({
     color: "#991B1B",
   },
 
-  modalScoreBox: {
-    backgroundColor: "#EEF2FF",
-    borderRadius: 16,
-    padding: 13,
+  scoreGrid: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 10,
     marginBottom: 12,
   },
 
-  modalScoreLabel: {
-    fontSize: 13,
+  scoreMiniBox: {
+    flex: 1,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 16,
+    padding: 12,
+    alignItems: "center",
+  },
+
+  scoreValue: {
+    fontSize: 16,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+
+  scoreLabel: {
+    fontSize: 11,
     color: "#334155",
     fontWeight: "900",
   },
 
-  modalScoreValue: {
-    fontSize: 15,
-    color: ACTION_COLOR,
-    fontWeight: "900",
+  fallbackNotice: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  fallbackNoticeText: {
+    flex: 1,
+    marginLeft: 7,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400E",
+    fontWeight: "800",
   },
 
   modalBuiltBox: {
