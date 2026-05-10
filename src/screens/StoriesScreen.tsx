@@ -13,19 +13,22 @@ import {
   View,
 } from "react-native";
 
-import { analyzeSentenceWithBackend } from "../config/api";
+import {
+  analyzeSentenceWithBackend,
+  type AnalyzeApiResponse,
+} from "../config/api";
 import { addActivity } from "../utils/activityHistory";
 
 import {
   defaultProfile,
   getProfile,
-  ProfileData,
+  type ProfileData,
 } from "../utils/profileStore";
 
 import {
-  AppSettings,
   defaultSettings,
   getSettings,
+  type AppSettings,
 } from "../utils/settingsStore";
 
 import {
@@ -70,10 +73,13 @@ type StoryResultData = {
   score: number;
   fluency: number;
   confidence: number;
-  mistake: string;
+  mistakes: string[];
   correction: string;
   teacherExplanation: string;
   smartSuggestion: string;
+  repeatSentence: string;
+  coachReply: string;
+  usedBackend: boolean;
 };
 
 const ACTION_COLOR = "#8499DC";
@@ -229,6 +235,94 @@ const storyTasks: StoryTask[] = [
   },
 ];
 
+function getBaseScore(level: StoryLevel) {
+  if (level === "Beginner") return 70;
+  if (level === "Intermediate") return 68;
+  return 65;
+}
+
+function buildDefaultResult(story: StoryTask): StoryResultData {
+  const baseScore = getBaseScore(story.level);
+
+  return {
+    userStory: "",
+    betterStory: story.correctStory,
+    score: baseScore,
+    fluency: Math.max(baseScore - 6, 0),
+    confidence: Math.max(baseScore - 2, 0),
+    mistakes: [story.mistake],
+    correction: story.correction,
+    teacherExplanation: story.teacherExplanation,
+    smartSuggestion: story.smartSuggestion,
+    repeatSentence: story.correctStory,
+    coachReply: "Good try. Now repeat the improved story slowly and clearly.",
+    usedBackend: false,
+  };
+}
+
+function buildFallbackResult(
+  story: StoryTask,
+  spokenStory: string
+): StoryResultData {
+  const defaultResult = buildDefaultResult(story);
+
+  return {
+    ...defaultResult,
+    userStory: spokenStory,
+    usedBackend: false,
+  };
+}
+
+function mapBackendResult(
+  story: StoryTask,
+  spokenStory: string,
+  backendResult: AnalyzeApiResponse
+): StoryResultData {
+  const backendScore =
+    typeof backendResult.score === "number" &&
+    !Number.isNaN(backendResult.score)
+      ? backendResult.score
+      : getBaseScore(story.level);
+
+  const correctedText =
+    backendResult.correctedText ||
+    backendResult.improved ||
+    backendResult.repeatSentence ||
+    story.correctStory;
+
+  const mistakes =
+    Array.isArray(backendResult.mistakes) && backendResult.mistakes.length > 0
+      ? backendResult.mistakes
+      : [story.mistake];
+
+  return {
+    userStory: backendResult.originalText || spokenStory,
+    betterStory: correctedText,
+    score: backendScore,
+    fluency:
+      typeof backendResult.fluencyScore === "number"
+        ? backendResult.fluencyScore
+        : Math.max(backendScore - 6, 0),
+    confidence:
+      typeof backendResult.confidenceScore === "number"
+        ? backendResult.confidenceScore
+        : Math.max(backendScore - 2, 0),
+    mistakes,
+    correction: backendResult.simpleExplanation || story.correction,
+    teacherExplanation:
+      backendResult.teacherExplanation || story.teacherExplanation,
+    smartSuggestion:
+      backendResult.smartSuggestion ||
+      backendResult.coachReply ||
+      story.smartSuggestion,
+    repeatSentence: backendResult.repeatSentence || correctedText,
+    coachReply:
+      backendResult.coachReply ||
+      "Good effort. Repeat the better story to build fluency.",
+    usedBackend: true,
+  };
+}
+
 export default function StoriesScreen() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -237,18 +331,9 @@ export default function StoriesScreen() {
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
-
-  const [resultData, setResultData] = useState<StoryResultData>({
-    userStory: "",
-    betterStory: storyTasks[0].correctStory,
-    score: 70,
-    fluency: 64,
-    confidence: 68,
-    mistake: storyTasks[0].mistake,
-    correction: storyTasks[0].correction,
-    teacherExplanation: storyTasks[0].teacherExplanation,
-    smartSuggestion: storyTasks[0].smartSuggestion,
-  });
+  const [resultData, setResultData] = useState<StoryResultData>(
+    buildDefaultResult(storyTasks[0])
+  );
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(12)).current;
@@ -383,91 +468,37 @@ export default function StoriesScreen() {
     });
   };
 
-  const getDefaultResult = (story: StoryTask): StoryResultData => {
-    return {
-      userStory: "",
-      betterStory: story.correctStory,
-      score:
-        story.level === "Beginner" ? 70 : story.level === "Intermediate" ? 68 : 65,
-      fluency: 64,
-      confidence: 68,
-      mistake: story.mistake,
-      correction: story.correction,
-      teacherExplanation: story.teacherExplanation,
-      smartSuggestion: story.smartSuggestion,
-    };
-  };
-
   const chooseStory = (story: StoryTask) => {
     Speech.stop();
     setSelectedStory(story);
     setPracticeState("idle");
     setRepeatState("idle");
     setShowResultPopup(false);
-    setResultData(getDefaultResult(story));
+    setResultData(buildDefaultResult(story));
   };
 
   const analyzeStoryWithBackend = async (spokenStory: string) => {
     try {
       const backendResult = await analyzeSentenceWithBackend(spokenStory);
+      const mappedResult = mapBackendResult(
+        selectedStory,
+        spokenStory,
+        backendResult
+      );
 
-      const backendHasUsefulCorrection =
-        backendResult.correctedText &&
-        backendResult.correctedText.trim().toLowerCase() !==
-          spokenStory.trim().toLowerCase();
-
-      const backendMistakes =
-        backendResult.mistakes && backendResult.mistakes.length > 0
-          ? backendResult.mistakes.join(", ")
-          : "";
-
-      const nextResult: StoryResultData = {
-        userStory: backendResult.originalText || spokenStory,
-        betterStory: backendHasUsefulCorrection
-          ? backendResult.correctedText
-          : selectedStory.correctStory,
-        score: backendResult.score || getDefaultResult(selectedStory).score,
-        fluency:
-          backendResult.fluencyScore ||
-          Math.max((backendResult.score || 70) - 8, 0),
-        confidence:
-          backendResult.confidenceScore ||
-          Math.max((backendResult.score || 70) - 5, 0),
-        mistake: backendMistakes || selectedStory.mistake,
-        correction: backendResult.simpleExplanation || selectedStory.correction,
-        teacherExplanation:
-          backendResult.teacherExplanation || selectedStory.teacherExplanation,
-        smartSuggestion:
-          backendResult.smartSuggestion ||
-          backendResult.coachReply ||
-          selectedStory.smartSuggestion,
-      };
-
-      setResultData(nextResult);
-      return nextResult;
+      setResultData(mappedResult);
+      return mappedResult;
     } catch (error) {
-      console.log("Stories backend error:", error);
+      console.log("Stories backend fallback:", error);
 
-      const fallbackResult: StoryResultData = {
-        ...getDefaultResult(selectedStory),
-        userStory: spokenStory,
-        correction:
-          "Backend is not reachable, so this is the local MVP story correction.",
-      };
+      const fallbackResult = buildFallbackResult(selectedStory, spokenStory);
 
       setResultData(fallbackResult);
       return fallbackResult;
     }
   };
 
-  const stopAndAnalyzeStory = async () => {
-    const simulatedStory = selectedStory.sampleUserStory;
-
-    const analyzedResult = await analyzeStoryWithBackend(simulatedStory);
-
-    setPracticeState("completed");
-    setShowResultPopup(true);
-
+  const saveStoryActivity = async (analyzedResult: StoryResultData) => {
     try {
       await addActivity({
         type: "stories",
@@ -476,7 +507,7 @@ export default function StoriesScreen() {
         score: analyzedResult.score,
         confidence: analyzedResult.confidence,
         fluency: analyzedResult.fluency,
-        mistake: analyzedResult.mistake,
+        mistake: analyzedResult.mistakes.join(", "),
         correctedSentence: analyzedResult.betterStory,
       });
     } catch (error) {
@@ -484,9 +515,19 @@ export default function StoriesScreen() {
     }
   };
 
+  const stopAndAnalyzeStory = async () => {
+    const simulatedStory = selectedStory.sampleUserStory;
+    const analyzedResult = await analyzeStoryWithBackend(simulatedStory);
+
+    setPracticeState("completed");
+    setShowResultPopup(true);
+
+    await saveStoryActivity(analyzedResult);
+  };
+
   const handleMainStoryButton = async () => {
     if (repeatState === "recording") {
-      const repeatResult = await analyzeStoryWithBackend(resultData.betterStory);
+      const repeatSentence = resultData.repeatSentence || resultData.betterStory;
 
       setRepeatState("saved");
 
@@ -494,11 +535,12 @@ export default function StoriesScreen() {
         await addActivity({
           type: "stories",
           title: "Story repeat practice",
-          detail: `Repeated story: ${repeatResult.betterStory}`,
-          score: Math.min(repeatResult.score + 8, 100),
-          confidence: Math.min(repeatResult.confidence + 6, 100),
-          fluency: Math.min(repeatResult.fluency + 6, 100),
-          correctedSentence: repeatResult.betterStory,
+          detail: `Repeated story: ${repeatSentence}`,
+          score: Math.min(resultData.score + 8, 100),
+          confidence: Math.min(resultData.confidence + 6, 100),
+          fluency: Math.min(resultData.fluency + 6, 100),
+          mistake: resultData.mistakes.join(", "),
+          correctedSentence: repeatSentence,
         });
       } catch (error) {
         console.log("Failed to save story repeat activity:", error);
@@ -510,7 +552,7 @@ export default function StoriesScreen() {
     if (repeatState === "saved") {
       setRepeatState("idle");
       setPracticeState("idle");
-      setResultData(getDefaultResult(selectedStory));
+      setResultData(buildDefaultResult(selectedStory));
       return;
     }
 
@@ -541,7 +583,7 @@ export default function StoriesScreen() {
     setPracticeState("idle");
     setRepeatState("idle");
     setShowResultPopup(false);
-    setResultData(getDefaultResult(selectedStory));
+    setResultData(buildDefaultResult(selectedStory));
   };
 
   const openLiveStory = () => {
@@ -552,15 +594,15 @@ export default function StoriesScreen() {
   };
 
   const getMainButtonText = () => {
-    if (repeatState === "recording") return "Recording";
+    if (repeatState === "recording") return "Save Repeat";
     if (repeatState === "saved") return "Practice Again";
     if (practiceState === "idle") return "Start";
-    if (practiceState === "recording") return "Recording";
+    if (practiceState === "recording") return "Stop & Check";
     return "Repeat";
   };
 
   const getMainButtonIcon = (): keyof typeof Ionicons.glyphMap => {
-    if (repeatState === "recording") return "stop";
+    if (repeatState === "recording") return "checkmark-outline";
     if (repeatState === "saved") return "refresh-outline";
     if (practiceState === "idle") return "mic-outline";
     if (practiceState === "recording") return "stop";
@@ -627,7 +669,7 @@ export default function StoriesScreen() {
 
         <View style={styles.imageStoryCard}>
           <View style={styles.cardTopRow}>
-            <View>
+            <View style={styles.cardTitleBox}>
               <Text style={styles.cardLabel}>Picture Story</Text>
               <Text style={styles.cardTitle}>{selectedStory.title}</Text>
             </View>
@@ -822,8 +864,7 @@ export default function StoriesScreen() {
               <View style={styles.resultBox}>
                 <Text style={styles.resultLabel}>Result</Text>
                 <Text style={styles.resultText}>
-                  Good try. Your story is understandable, but it needs better
-                  grammar and sentence connection.
+                  {resultData.coachReply}
                 </Text>
               </View>
 
@@ -879,7 +920,11 @@ export default function StoriesScreen() {
                   <Text style={styles.modalInfoTitle}>Mistakes Found</Text>
                 </View>
 
-                <Text style={styles.modalInfoText}>{resultData.mistake}</Text>
+                {resultData.mistakes.map((mistake) => (
+                  <Text key={mistake} style={styles.modalInfoText}>
+                    • {mistake}
+                  </Text>
+                ))}
               </View>
 
               <View style={styles.modalInfoBox}>
@@ -953,15 +998,14 @@ export default function StoriesScreen() {
                   <View style={styles.modalRepeatTextBox}>
                     <Text style={styles.modalRepeatTitle}>Repeat It</Text>
                     <Text style={styles.modalRepeatSubtitle}>
-                      Tap Repeat It. The popup will close and the main button
-                      will start repeat recording.
+                      Repeat the improved story to build speaking confidence.
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.modalRepeatSentenceBox}>
                   <Text style={styles.modalRepeatSentence}>
-                    {resultData.betterStory}
+                    {resultData.repeatSentence}
                   </Text>
                 </View>
               </View>
@@ -970,7 +1014,7 @@ export default function StoriesScreen() {
             <View style={styles.modalActionRow}>
               <TouchableOpacity
                 style={styles.modalLightButton}
-                onPress={() => speakText(resultData.betterStory)}
+                onPress={() => speakText(resultData.repeatSentence)}
                 activeOpacity={0.85}
               >
                 <Ionicons
@@ -1106,6 +1150,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 14,
+  },
+
+  cardTitleBox: {
+    flex: 1,
+    paddingRight: 10,
   },
 
   cardLabel: {
