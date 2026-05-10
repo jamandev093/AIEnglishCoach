@@ -56,7 +56,7 @@ const featureBlueprints = [
   {
     title: "Speaking Coach",
     type: "speaking",
-    route: "/(tabs)/speaking",
+    route: "/speaking",
     icon: "mic-outline" as keyof typeof Ionicons.glyphMap,
   },
   {
@@ -332,7 +332,7 @@ export default function ProgressScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <View style={styles.cardIcon}>
-            <Ionicons name="brain-outline" size={22} color={ACTION_COLOR} />
+            <Ionicons name="bulb-outline" size={22} color={ACTION_COLOR} />
           </View>
 
           <View style={styles.cardTitleBox}>
@@ -649,7 +649,7 @@ export default function ProgressScreen() {
 
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => openRoute("/(tabs)/speaking")}
+            onPress={() => openRoute("/speaking")}
             activeOpacity={0.85}
           >
             <Ionicons name="mic-outline" size={18} color="#FFFFFF" />
@@ -753,7 +753,7 @@ function getRouteForWeakArea(area: string) {
   if (lower.includes("story")) return "/stories";
   if (lower.includes("grammar")) return "/grammar";
 
-  return "/(tabs)/speaking";
+  return "/speaking";
 }
 
 function getAverageScore(items: ActivityRecord[]) {
