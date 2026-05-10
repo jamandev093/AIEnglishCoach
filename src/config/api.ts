@@ -113,3 +113,35 @@ export async function analyzeSentenceWithBackend(
 
   return normalizeAnalyzeResponse(data, cleanText);
 }
+
+
+export async function analyzeSpeechWithBackend(
+  audioUri: string
+): Promise<AnalyzeApiResponse> {
+  if (!audioUri.trim()) {
+    throw new Error("Audio URI is required for speech analysis");
+  }
+
+  const fileName = audioUri.split("/").pop() || "speech.m4a";
+
+  const formData = new FormData();
+
+  formData.append("file", {
+    uri: audioUri,
+    name: fileName,
+    type: "audio/m4a",
+  } as any);
+
+  const response = await fetch(`${API_BASE_URL}/speech/analyze`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Backend speech analyze request failed: ${response.status}`);
+  }
+
+  const data = (await response.json()) as RawAnalyzeApiResponse;
+
+  return normalizeAnalyzeResponse(data, "I go market");
+}
