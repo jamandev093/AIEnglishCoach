@@ -13,19 +13,22 @@ import {
   View,
 } from "react-native";
 
-import { analyzeSentenceWithBackend } from "../src/config/api";
+import {
+  analyzeSentenceWithBackend,
+  type AnalyzeApiResponse,
+} from "../src/config/api";
 import { addActivity } from "../src/utils/activityHistory";
 
 import {
   defaultProfile,
   getProfile,
-  ProfileData,
+  type ProfileData,
 } from "../src/utils/profileStore";
 
 import {
-  AppSettings,
   defaultSettings,
   getSettings,
+  type AppSettings,
 } from "../src/utils/settingsStore";
 
 import {
@@ -34,6 +37,7 @@ import {
 } from "../src/utils/languageMode";
 
 type PracticeState = "idle" | "recording" | "checked";
+type RepeatState = "idle" | "recording" | "saved";
 
 type VocabWord = {
   word: string;
@@ -57,11 +61,16 @@ type Category = {
 
 type ResultData = {
   score: number;
+  confidenceScore: number;
+  fluencyScore: number;
+  speakingScore: number;
   word: string;
   userSentence: string;
   betterSentence: string;
   mistake: string;
   coachTip: string;
+  repeatSentence: string;
+  usedBackend: boolean;
 };
 
 const ACTION_COLOR = "#8499DC";
@@ -133,6 +142,94 @@ const words: VocabWord[] = [
   },
 ];
 
+function buildDefaultResult(word: VocabWord): ResultData {
+  return {
+    score: 0,
+    confidenceScore: 0,
+    fluencyScore: 0,
+    speakingScore: 0,
+    word: word.word,
+    userSentence: "",
+    betterSentence: word.nativeStyle,
+    mistake: word.mistakeTip,
+    coachTip: "Use the word in a full sentence, then say it aloud.",
+    repeatSentence: word.nativeStyle,
+    usedBackend: false,
+  };
+}
+
+function buildFallbackResult(word: VocabWord, sentence: string): ResultData {
+  const usedWord = sentence.toLowerCase().includes(word.word.toLowerCase());
+  const score = usedWord ? 78 : 62;
+
+  return {
+    score,
+    confidenceScore: usedWord ? 74 : 62,
+    fluencyScore: usedWord ? 72 : 60,
+    speakingScore: usedWord ? 76 : 62,
+    word: word.word,
+    userSentence: sentence,
+    betterSentence: word.nativeStyle,
+    mistake: usedWord
+      ? "Good. Now make the sentence more natural and complete."
+      : word.mistakeTip,
+    coachTip:
+      "Local fallback result used. Repeat the better sentence slowly and clearly.",
+    repeatSentence: word.nativeStyle,
+    usedBackend: false,
+  };
+}
+
+function mapBackendResult(
+  selectedWord: VocabWord,
+  sentence: string,
+  backendResult: AnalyzeApiResponse
+): ResultData {
+  const backendScore =
+    typeof backendResult.score === "number" &&
+    !Number.isNaN(backendResult.score)
+      ? backendResult.score
+      : 78;
+
+  const betterSentence =
+    backendResult.correctedText ||
+    backendResult.improved ||
+    backendResult.repeatSentence ||
+    selectedWord.nativeStyle;
+
+  const mistake =
+    Array.isArray(backendResult.mistakes) && backendResult.mistakes.length > 0
+      ? backendResult.mistakes.join(", ")
+      : "No major mistake found. Try to use this word naturally in a full sentence.";
+
+  return {
+    score: backendScore,
+    confidenceScore:
+      typeof backendResult.confidenceScore === "number"
+        ? backendResult.confidenceScore
+        : Math.min(backendScore + 2, 100),
+    fluencyScore:
+      typeof backendResult.fluencyScore === "number"
+        ? backendResult.fluencyScore
+        : Math.max(backendScore - 4, 0),
+    speakingScore:
+      typeof backendResult.pronunciationScore === "number"
+        ? backendResult.pronunciationScore
+        : backendScore,
+    word: selectedWord.word,
+    userSentence: backendResult.originalText || sentence,
+    betterSentence,
+    mistake,
+    coachTip:
+      backendResult.smartSuggestion ||
+      backendResult.coachReply ||
+      backendResult.simpleExplanation ||
+      "Good. Now repeat the better sentence and try to use this word naturally in real conversation.",
+    repeatSentence: backendResult.repeatSentence || betterSentence,
+    usedBackend: true,
+  };
+}
+
 export default function VocabularyScreen() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -141,15 +238,11 @@ export default function VocabularyScreen() {
   const [selectedWord, setSelectedWord] = useState<VocabWord>(words[0]);
   const [typedSentence, setTypedSentence] = useState("");
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
+  const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
-  const [resultData, setResultData] = useState<ResultData>({
-    score: 0,
-    word: words[0].word,
-    userSentence: "",
-    betterSentence: words[0].nativeStyle,
-    mistake: words[0].mistakeTip,
-    coachTip: "Use the word in a full sentence, then say it aloud.",
-  });
+  const [resultData, setResultData] = useState<ResultData>(
+    buildDefaultResult(words[0])
+  );
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(12)).current;
@@ -157,14 +250,21 @@ export default function VocabularyScreen() {
   const barThree = useRef(new Animated.Value(16)).current;
   const barFour = useRef(new Animated.Value(31)).current;
 
+  const isRecording =
+    practiceState === "recording" || repeatState === "recording";
+
   useFocusEffect(
     useCallback(() => {
       const loadProfileAndSettings = async () => {
-        const savedProfile = await getProfile();
-        const savedSettings = await getSettings();
+        try {
+          const savedProfile = await getProfile();
+          const savedSettings = await getSettings();
 
-        setProfile(savedProfile);
-        setSettings(savedSettings);
+          setProfile(savedProfile);
+          setSettings(savedSettings);
+        } catch (error) {
+          console.log("Failed to load Vocabulary settings:", error);
+        }
       };
 
       loadProfileAndSettings();
@@ -172,7 +272,7 @@ export default function VocabularyScreen() {
   );
 
   useEffect(() => {
-    if (practiceState !== "recording") {
+    if (!isRecording) {
       pulseAnim.setValue(1);
       barOne.setValue(12);
       barTwo.setValue(26);
@@ -256,7 +356,7 @@ export default function VocabularyScreen() {
       pulseLoop.stop();
       waveLoop.stop();
     };
-  }, [practiceState, pulseAnim, barOne, barTwo, barThree, barFour]);
+  }, [isRecording, pulseAnim, barOne, barTwo, barThree, barFour]);
 
   const displayLanguage = getDisplayLanguage(profile, settings);
   const languageModeLabel = getLanguageModeLabel(profile, settings);
@@ -296,15 +396,9 @@ export default function VocabularyScreen() {
     setSelectedWord(word);
     setTypedSentence("");
     setPracticeState("idle");
+    setRepeatState("idle");
     setShowResultPopup(false);
-    setResultData({
-      score: 0,
-      word: word.word,
-      userSentence: "",
-      betterSentence: word.nativeStyle,
-      mistake: word.mistakeTip,
-      coachTip: "Use the word in a full sentence, then say it aloud.",
-    });
+    setResultData(buildDefaultResult(word));
   };
 
   const addWordToSentence = (word: string) => {
@@ -315,37 +409,88 @@ export default function VocabularyScreen() {
     });
 
     setPracticeState("idle");
+    setRepeatState("idle");
   };
 
   const resetPractice = () => {
     Speech.stop();
     setTypedSentence("");
     setPracticeState("idle");
+    setRepeatState("idle");
     setShowResultPopup(false);
-    setResultData({
-      score: 0,
-      word: selectedWord.word,
-      userSentence: "",
-      betterSentence: selectedWord.nativeStyle,
-      mistake: selectedWord.mistakeTip,
-      coachTip: "Use the word in a full sentence, then say it aloud.",
-    });
+    setResultData(buildDefaultResult(selectedWord));
   };
 
   const saveVocabularyPractice = async (data: ResultData) => {
-    await addActivity({
-      type: "vocabulary",
-      title: "Vocabulary practice",
-      detail: `Practiced word: ${data.word} — ${data.userSentence}`,
-      score: data.score,
-      confidence: 62,
-      fluency: 60,
-      mistake: data.mistake,
-      correctedSentence: data.betterSentence,
-    });
+    try {
+      await addActivity({
+        type: "vocabulary",
+        title: "Vocabulary practice",
+        detail: `Practiced word: ${data.word} — ${data.userSentence}`,
+        score: data.score,
+        confidence: data.confidenceScore,
+        fluency: data.fluencyScore,
+        mistake: data.mistake,
+        correctedSentence: data.betterSentence,
+      });
+    } catch (error) {
+      console.log("Failed to save Vocabulary activity:", error);
+    }
+  };
+
+  const checkVocabularySentence = async (sentence: string) => {
+    try {
+      const backendResult = await analyzeSentenceWithBackend(sentence);
+      const mappedResult = mapBackendResult(
+        selectedWord,
+        sentence,
+        backendResult
+      );
+
+      setResultData(mappedResult);
+      await saveVocabularyPractice(mappedResult);
+      return mappedResult;
+    } catch (error) {
+      console.log("Vocabulary backend fallback:", error);
+
+      const fallbackResult = buildFallbackResult(selectedWord, sentence);
+
+      setResultData(fallbackResult);
+      await saveVocabularyPractice(fallbackResult);
+      return fallbackResult;
+    }
   };
 
   const handleSpeakAction = async () => {
+    if (repeatState === "recording") {
+      const repeatSentence = resultData.repeatSentence || resultData.betterSentence;
+
+      setRepeatState("saved");
+
+      try {
+        await addActivity({
+          type: "vocabulary",
+          title: "Vocabulary repeat practice",
+          detail: `Repeated: ${repeatSentence}`,
+          score: Math.min(resultData.score + 6, 100),
+          confidence: Math.min(resultData.confidenceScore + 6, 100),
+          fluency: Math.min(resultData.fluencyScore + 6, 100),
+          mistake: resultData.mistake,
+          correctedSentence: repeatSentence,
+        });
+      } catch (error) {
+        console.log("Failed to save Vocabulary repeat:", error);
+      }
+
+      return;
+    }
+
+    if (repeatState === "saved") {
+      setRepeatState("idle");
+      setPracticeState("idle");
+      return;
+    }
+
     if (practiceState === "idle" || practiceState === "checked") {
       setPracticeState("recording");
       return;
@@ -354,68 +499,29 @@ export default function VocabularyScreen() {
     const finalSentence =
       typedSentence.trim() || `I want to use ${selectedWord.word}.`;
 
-    try {
-      const backendResult = await analyzeSentenceWithBackend(finalSentence);
+    await checkVocabularySentence(finalSentence);
 
-      const result: ResultData = {
-        score: backendResult.score || 0,
-        word: selectedWord.word,
-        userSentence: backendResult.originalText || finalSentence,
-        betterSentence:
-          backendResult.correctedText ||
-          backendResult.improved ||
-          selectedWord.nativeStyle,
-        mistake:
-          backendResult.mistakes && backendResult.mistakes.length > 0
-            ? backendResult.mistakes.join(", ")
-            : "No major mistake found",
-        coachTip:
-          backendResult.smartSuggestion ||
-          backendResult.coachReply ||
-          backendResult.simpleExplanation ||
-          "Good. Now repeat the better sentence and try to use this word naturally in real conversation.",
-      };
-
-      setResultData(result);
-      setPracticeState("checked");
-      setShowResultPopup(true);
-      await saveVocabularyPractice(result);
-    } catch (error) {
-      console.log("Vocabulary backend error:", error);
-
-      const fallbackResult: ResultData = {
-        score: finalSentence
-          .toLowerCase()
-          .includes(selectedWord.word.toLowerCase())
-          ? 78
-          : 62,
-        word: selectedWord.word,
-        userSentence: finalSentence,
-        betterSentence: selectedWord.nativeStyle,
-        mistake: selectedWord.mistakeTip,
-        coachTip:
-          "Backend is not reachable, so this is the local MVP result. Repeat the better sentence slowly.",
-      };
-
-      setResultData(fallbackResult);
-      setPracticeState("checked");
-      setShowResultPopup(true);
-      await saveVocabularyPractice(fallbackResult);
-    }
+    setPracticeState("checked");
+    setShowResultPopup(true);
   };
 
   const startRepeatFromPopup = () => {
     setShowResultPopup(false);
-    setPracticeState("recording");
+    setPracticeState("idle");
+    setRepeatState("recording");
   };
 
   const getSpeakButtonText = () => {
+    if (repeatState === "recording") return "Save Repeat";
+    if (repeatState === "saved") return "Practice Again";
     if (practiceState === "recording") return "Stop & Check";
     if (practiceState === "checked") return "Practice Again";
     return "Speak";
   };
 
   const getSpeakButtonIcon = (): keyof typeof Ionicons.glyphMap => {
+    if (repeatState === "recording") return "checkmark-outline";
+    if (repeatState === "saved") return "refresh-outline";
     if (practiceState === "recording") return "stop";
     if (practiceState === "checked") return "refresh-outline";
     return "mic-outline";
@@ -427,8 +533,9 @@ export default function VocabularyScreen() {
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        bounces={false}
+        overScrollMode="never"
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -443,7 +550,6 @@ export default function VocabularyScreen() {
           <View style={styles.emptyBox} />
         </View>
 
-        {/* Topic Selector */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Choose Topic</Text>
         </View>
@@ -452,6 +558,8 @@ export default function VocabularyScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryRow}
+          bounces={false}
+          overScrollMode="never"
         >
           {categories.map((category) => {
             const active = selectedCategory === category.title;
@@ -477,7 +585,6 @@ export default function VocabularyScreen() {
           })}
         </ScrollView>
 
-        {/* Main Vocabulary Teaching Card */}
         <View style={styles.wordCard}>
           <View style={styles.wordTopRow}>
             <View style={styles.wordTitleBox}>
@@ -528,7 +635,6 @@ export default function VocabularyScreen() {
           </View>
         </View>
 
-        {/* Build and Speak */}
         <View style={styles.practiceCard}>
           <Text style={styles.practiceTitle}>Use the Word</Text>
           <Text style={styles.practiceText}>{selectedWord.userPrompt}</Text>
@@ -539,6 +645,7 @@ export default function VocabularyScreen() {
             onChangeText={(text) => {
               setTypedSentence(text);
               setPracticeState("idle");
+              setRepeatState("idle");
             }}
             placeholder={`Type your sentence with "${selectedWord.word}"...`}
             placeholderTextColor="#94A3B8"
@@ -556,13 +663,13 @@ export default function VocabularyScreen() {
           <View
             style={[
               styles.recordBox,
-              practiceState === "recording" && styles.recordBoxActive,
+              isRecording && styles.recordBoxActive,
             ]}
           >
             <Animated.View
               style={[
                 styles.micCircle,
-                practiceState === "recording" && {
+                isRecording && {
                   backgroundColor: RECORDING_COLOR,
                   borderColor: RECORDING_COLOR,
                   transform: [{ scale: pulseAnim }],
@@ -570,13 +677,9 @@ export default function VocabularyScreen() {
               ]}
             >
               <Ionicons
-                name={
-                  practiceState === "recording"
-                    ? "radio-button-on"
-                    : "mic-outline"
-                }
+                name={isRecording ? "radio-button-on" : "mic-outline"}
                 size={28}
-                color={practiceState === "recording" ? "#FFFFFF" : ACTION_COLOR}
+                color={isRecording ? "#FFFFFF" : ACTION_COLOR}
               />
             </Animated.View>
 
@@ -589,16 +692,20 @@ export default function VocabularyScreen() {
 
             <View style={styles.statusTextBox}>
               <Text style={styles.statusTitle}>
-                {practiceState === "recording"
+                {isRecording
                   ? "Recording..."
+                  : repeatState === "saved"
+                  ? "Repeat saved"
                   : practiceState === "checked"
                   ? "Result ready"
                   : "Ready"}
               </Text>
 
               <Text style={styles.statusText}>
-                {practiceState === "recording"
+                {isRecording
                   ? "Say your sentence clearly."
+                  : repeatState === "saved"
+                  ? "Repeat practice was saved to Progress."
                   : practiceState === "checked"
                   ? "Open popup to review your result."
                   : "Type, listen, then speak your sentence."}
@@ -606,10 +713,19 @@ export default function VocabularyScreen() {
             </View>
           </View>
 
+          {repeatState === "saved" && (
+            <View style={styles.savedBox}>
+              <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+              <Text style={styles.savedText}>
+                Vocabulary repeat practice saved to Progress.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={styles.listenButton}
-              onPress={() => speakText(selectedWord.nativeStyle)}
+              onPress={() => speakText(resultData.repeatSentence)}
               activeOpacity={0.85}
             >
               <Ionicons
@@ -623,7 +739,7 @@ export default function VocabularyScreen() {
             <TouchableOpacity
               style={[
                 styles.speakButton,
-                practiceState === "recording" && styles.speakButtonRecording,
+                isRecording && styles.speakButtonRecording,
               ]}
               onPress={handleSpeakAction}
               activeOpacity={0.85}
@@ -654,7 +770,6 @@ export default function VocabularyScreen() {
           )}
         </View>
 
-        {/* More Words */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>More Words in {selectedCategory}</Text>
         </View>
@@ -694,7 +809,6 @@ export default function VocabularyScreen() {
         </View>
       </ScrollView>
 
-      {/* Result Popup */}
       <Modal
         visible={showResultPopup}
         transparent
@@ -725,11 +839,43 @@ export default function VocabularyScreen() {
             <ScrollView
               style={styles.modalScroll}
               showsVerticalScrollIndicator={false}
+              bounces={false}
+              overScrollMode="never"
             >
-              <View style={styles.scoreBox}>
-                <Text style={styles.scoreLabel}>Vocabulary score</Text>
-                <Text style={styles.scoreValue}>{resultData.score}%</Text>
+              <View style={styles.scoreGrid}>
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>{resultData.fluencyScore}%</Text>
+                  <Text style={styles.scoreLabel}>Fluency</Text>
+                </View>
+
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>
+                    {resultData.confidenceScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Confidence</Text>
+                </View>
+
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>
+                    {resultData.speakingScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Speaking</Text>
+                </View>
               </View>
+
+              {!resultData.usedBackend && (
+                <View style={styles.fallbackNotice}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={18}
+                    color="#92400E"
+                  />
+                  <Text style={styles.fallbackNoticeText}>
+                    Local fallback result used. Backend connection can be tested
+                    again after this screen is stable.
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.resultBox}>
                 <Text style={styles.resultLabel}>Word practiced</Text>
@@ -768,7 +914,7 @@ export default function VocabularyScreen() {
                     size={22}
                     color={ACTION_COLOR}
                   />
-                  <Text style={styles.modalInfoTitle}>Mistake Memory</Text>
+                  <Text style={styles.modalInfoTitle}>Mistake / Focus</Text>
                 </View>
 
                 <Text style={styles.modalInfoText}>{resultData.mistake}</Text>
@@ -781,17 +927,39 @@ export default function VocabularyScreen() {
                     size={22}
                     color={ACTION_COLOR}
                   />
-                  <Text style={styles.modalInfoTitle}>Coach Tip</Text>
+                  <Text style={styles.modalInfoTitle}>AI Response</Text>
                 </View>
 
                 <Text style={styles.modalInfoText}>{resultData.coachTip}</Text>
+              </View>
+
+              <View style={styles.modalRepeatBox}>
+                <View style={styles.modalRepeatTopRow}>
+                  <View style={styles.modalRepeatIcon}>
+                    <Ionicons name="mic-outline" size={23} color={ACTION_COLOR} />
+                  </View>
+
+                  <View style={styles.modalRepeatTextBox}>
+                    <Text style={styles.modalRepeatTitle}>Repeat It</Text>
+                    <Text style={styles.modalRepeatSubtitle}>
+                      Repeat the better sentence to remember this word in real
+                      speaking.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.modalRepeatSentenceBox}>
+                  <Text style={styles.modalRepeatSentence}>
+                    {resultData.repeatSentence}
+                  </Text>
+                </View>
               </View>
             </ScrollView>
 
             <View style={styles.modalActionRow}>
               <TouchableOpacity
                 style={styles.modalLightButton}
-                onPress={() => speakText(resultData.betterSentence)}
+                onPress={() => speakText(resultData.repeatSentence)}
                 activeOpacity={0.85}
               >
                 <Ionicons
@@ -1154,6 +1322,26 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  savedBox: {
+    marginTop: 12,
+    backgroundColor: "#ECFDF5",
+    borderRadius: 15,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  savedText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#166534",
+    fontWeight: "800",
+  },
+
   actionRow: {
     flexDirection: "row",
     gap: 10,
@@ -1342,25 +1530,51 @@ const styles = StyleSheet.create({
     maxHeight: 460,
   },
 
-  scoreBox: {
-    backgroundColor: "#EEF2FF",
-    borderRadius: 16,
-    padding: 13,
+  scoreGrid: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 10,
     marginBottom: 12,
   },
 
+  scoreMiniBox: {
+    flex: 1,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 16,
+    padding: 12,
+    alignItems: "center",
+  },
+
+  scoreValue: {
+    fontSize: 16,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+
   scoreLabel: {
-    fontSize: 13,
+    fontSize: 11,
     color: "#334155",
     fontWeight: "900",
   },
 
-  scoreValue: {
-    fontSize: 15,
-    color: ACTION_COLOR,
-    fontWeight: "900",
+  fallbackNotice: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  fallbackNoticeText: {
+    flex: 1,
+    marginLeft: 7,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400E",
+    fontWeight: "800",
   },
 
   resultBox: {
@@ -1464,7 +1678,7 @@ const styles = StyleSheet.create({
     padding: 13,
     borderWidth: 1,
     borderColor: "#C7D2FE",
-    marginBottom: 4,
+    marginBottom: 10,
   },
 
   modalInfoTopRow: {
@@ -1485,6 +1699,64 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: "#334155",
     fontWeight: "700",
+  },
+
+  modalRepeatBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 4,
+  },
+
+  modalRepeatTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  modalRepeatIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+
+  modalRepeatTextBox: {
+    flex: 1,
+  },
+
+  modalRepeatTitle: {
+    fontSize: 15,
+    color: "#0F172A",
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+
+  modalRepeatSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+    fontWeight: "700",
+  },
+
+  modalRepeatSentenceBox: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  modalRepeatSentence: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: "#0F172A",
+    fontWeight: "900",
   },
 
   modalActionRow: {
