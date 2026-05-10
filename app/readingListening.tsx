@@ -12,19 +12,22 @@ import {
   View,
 } from "react-native";
 
-import { analyzeSentenceWithBackend } from "../src/config/api";
+import {
+  analyzeSentenceWithBackend,
+  type AnalyzeApiResponse,
+} from "../src/config/api";
 import { addActivity } from "../src/utils/activityHistory";
 
 import {
   defaultProfile,
   getProfile,
-  ProfileData,
+  type ProfileData,
 } from "../src/utils/profileStore";
 
 import {
-  AppSettings,
   defaultSettings,
   getSettings,
+  type AppSettings,
 } from "../src/utils/settingsStore";
 
 import { getDisplayLanguage } from "../src/utils/languageMode";
@@ -59,13 +62,14 @@ type StoryItem = {
 
 type ResultData = {
   score: number;
-  listeningScore: number;
+  fluencyScore: number;
+  confidenceScore: number;
   speakingScore: number;
-  repeatAccuracy: number;
   userAnswer: string;
   correction: string;
   mistake: string;
-  coachTip: string;
+  repeatSentence: string;
+  usedBackend: boolean;
 };
 
 const ACTION_COLOR = "#8499DC";
@@ -262,6 +266,85 @@ const stories: StoryItem[] = [
   },
 ];
 
+function buildDefaultResult(
+  story: StoryItem,
+  questionIndex: number
+): ResultData {
+  return {
+    score: 74,
+    fluencyScore: 70,
+    confidenceScore: 72,
+    speakingScore: 74,
+    userAnswer: "",
+    correction: story.questions[questionIndex].answer,
+    mistake: "Try to answer with a complete sentence, not only one word.",
+    repeatSentence: story.questions[questionIndex].answer,
+    usedBackend: false,
+  };
+}
+
+function buildFallbackResult(
+  story: StoryItem,
+  questionIndex: number,
+  answerText: string
+): ResultData {
+  const defaultResult = buildDefaultResult(story, questionIndex);
+
+  return {
+    ...defaultResult,
+    userAnswer: answerText,
+    correction: story.questions[questionIndex].answer,
+    repeatSentence: story.questions[questionIndex].answer,
+    mistake:
+      "Local fallback result used. Try to answer with a full sentence using words from the story.",
+    usedBackend: false,
+  };
+}
+
+function mapBackendResult(
+  backendResult: AnalyzeApiResponse,
+  fallbackAnswer: string,
+  answerText: string
+): ResultData {
+  const backendScore =
+    typeof backendResult.score === "number" &&
+    !Number.isNaN(backendResult.score)
+      ? backendResult.score
+      : 78;
+
+  const correctedAnswer =
+    backendResult.correctedText ||
+    backendResult.improved ||
+    backendResult.repeatSentence ||
+    fallbackAnswer;
+
+  const mistakes =
+    Array.isArray(backendResult.mistakes) && backendResult.mistakes.length > 0
+      ? backendResult.mistakes.join(", ")
+      : "No major mistake found. Try to speak smoothly and clearly.";
+
+  return {
+    score: backendScore,
+    fluencyScore:
+      typeof backendResult.fluencyScore === "number"
+        ? backendResult.fluencyScore
+        : Math.max(backendScore - 6, 0),
+    confidenceScore:
+      typeof backendResult.confidenceScore === "number"
+        ? backendResult.confidenceScore
+        : Math.min(backendScore + 2, 100),
+    speakingScore:
+      typeof backendResult.pronunciationScore === "number"
+        ? backendResult.pronunciationScore
+        : backendScore,
+    userAnswer: backendResult.originalText || answerText,
+    correction: correctedAnswer,
+    mistake: mistakes,
+    repeatSentence: backendResult.repeatSentence || correctedAnswer,
+    usedBackend: true,
+  };
+}
+
 export default function ReadingListeningScreen() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -271,20 +354,9 @@ export default function ReadingListeningScreen() {
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
-
-  const selectedQuestion = selectedStory.questions[selectedQuestionIndex];
-
-  const [resultData, setResultData] = useState<ResultData>({
-    score: 74,
-    listeningScore: 78,
-    speakingScore: 70,
-    repeatAccuracy: 72,
-    userAnswer: "",
-    correction: stories[0].questions[0].answer,
-    mistake: "Try to speak the story in a complete sentence, not only one word.",
-    coachTip:
-      "Good listening. Now repeat one full sentence from the story slowly and clearly.",
-  });
+  const [resultData, setResultData] = useState<ResultData>(
+    buildDefaultResult(stories[0], 0)
+  );
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(12)).current;
@@ -295,14 +367,20 @@ export default function ReadingListeningScreen() {
   const isRecording =
     practiceState === "recording" || repeatState === "recording";
 
+  const selectedQuestion = selectedStory.questions[selectedQuestionIndex];
+
   useFocusEffect(
     useCallback(() => {
       const loadProfileAndSettings = async () => {
-        const savedProfile = await getProfile();
-        const savedSettings = await getSettings();
+        try {
+          const savedProfile = await getProfile();
+          const savedSettings = await getSettings();
 
-        setProfile(savedProfile);
-        setSettings(savedSettings);
+          setProfile(savedProfile);
+          setSettings(savedSettings);
+        } catch (error) {
+          console.log("Failed to load Reading & Listening settings:", error);
+        }
       };
 
       loadProfileAndSettings();
@@ -411,14 +489,12 @@ export default function ReadingListeningScreen() {
   const getSummary = () => {
     if (displayLanguage === "Bengali") return selectedStory.bengaliSummary;
     if (displayLanguage === "Hindi") return selectedStory.hindiSummary;
-
     return selectedStory.englishSummary;
   };
 
   const getKeywordMeaning = (item: KeyWord) => {
     if (displayLanguage === "Bengali") return item.bengali;
     if (displayLanguage === "Hindi") return item.hindi;
-
     return item.english;
   };
 
@@ -427,21 +503,11 @@ export default function ReadingListeningScreen() {
     .join(", ");
 
   const resetResultData = (story: StoryItem, questionIndex = 0) => {
-    setResultData({
-      score: 74,
-      listeningScore: 78,
-      speakingScore: 70,
-      repeatAccuracy: 72,
-      userAnswer: "",
-      correction: story.questions[questionIndex].answer,
-      mistake:
-        "Try to speak the story in a complete sentence, not only one word.",
-      coachTip:
-        "Good listening. Now repeat one full sentence from the story slowly and clearly.",
-    });
+    setResultData(buildDefaultResult(story, questionIndex));
   };
 
   const chooseStory = (story: StoryItem) => {
+    Speech.stop();
     setSelectedStory(story);
     setSelectedQuestionIndex(0);
     setPracticeState("idle");
@@ -475,82 +541,74 @@ export default function ReadingListeningScreen() {
   };
 
   const saveReadingListeningActivity = async (data: ResultData) => {
-    await addActivity({
-      type: "readingListening",
-      title: "Reading & Listening practice",
-      detail: `Listened and practiced: ${selectedStory.title}`,
-      score: data.score,
-      confidence: 62,
-      fluency: data.speakingScore,
-      mistake: data.mistake,
-      correctedSentence: data.correction,
-    });
+    try {
+      await addActivity({
+        type: "readingListening",
+        title: selectedStory.title,
+        detail: `Reading & Listening answer: ${data.userAnswer}`,
+        score: data.score,
+        confidence: data.confidenceScore,
+        fluency: data.fluencyScore,
+        mistake: data.mistake,
+        correctedSentence: data.correction,
+      });
+    } catch (error) {
+      console.log("Failed to save Reading & Listening activity:", error);
+    }
   };
 
   const checkAnswerWithBackend = async (answerText: string) => {
     try {
       const backendResult = await analyzeSentenceWithBackend(answerText);
 
-      const mistakes =
-        backendResult.mistakes && backendResult.mistakes.length > 0
-          ? backendResult.mistakes.join(", ")
-          : "No major mistake found. Try to speak smoothly and clearly.";
+      const mappedResult = mapBackendResult(
+        backendResult,
+        selectedQuestion.answer,
+        answerText
+      );
 
-      const newResult: ResultData = {
-        score: backendResult.score || 78,
-        listeningScore: 80,
-        speakingScore: backendResult.fluencyScore || Math.max((backendResult.score || 78) - 6, 0),
-        repeatAccuracy: backendResult.pronunciationScore || Math.max((backendResult.score || 78) - 4, 0),
-        userAnswer: backendResult.originalText || answerText,
-        correction:
-          backendResult.correctedText ||
-          backendResult.improved ||
-          selectedQuestion.answer,
-        mistake: mistakes,
-        coachTip:
-          backendResult.smartSuggestion ||
-          backendResult.coachReply ||
-          backendResult.simpleExplanation ||
-          "Good attempt. Listen once more, then repeat the answer clearly.",
-      };
-
-      setResultData(newResult);
-      await saveReadingListeningActivity(newResult);
+      setResultData(mappedResult);
+      await saveReadingListeningActivity(mappedResult);
+      return mappedResult;
     } catch (error) {
-      console.log("Reading & Listening backend error:", error);
+      console.log("Reading & Listening backend fallback:", error);
 
-      const fallbackResult: ResultData = {
-        score: 76,
-        listeningScore: 80,
-        speakingScore: 72,
-        repeatAccuracy: 74,
-        userAnswer: answerText,
-        correction: selectedQuestion.answer,
-        mistake:
-          "Backend is not reachable, so this is the local MVP result. Try to answer with a full sentence using words from the story.",
-        coachTip:
-          "Listen once more, then repeat the correct answer slowly and clearly.",
-      };
+      const fallbackResult = buildFallbackResult(
+        selectedStory,
+        selectedQuestionIndex,
+        answerText
+      );
 
       setResultData(fallbackResult);
       await saveReadingListeningActivity(fallbackResult);
+      return fallbackResult;
     }
   };
 
   const handleDynamicSpeaking = async () => {
     if (repeatState === "recording") {
-      const repeatAnswer = resultData.correction || selectedQuestion.answer;
-
-      await checkAnswerWithBackend(repeatAnswer);
+      const repeatAnswer = resultData.repeatSentence || selectedQuestion.answer;
 
       setRepeatState("saved");
-      setShowResultPopup(true);
+
+      await addActivity({
+        type: "readingListening",
+        title: "Reading & Listening repeat practice",
+        detail: `Repeated: ${repeatAnswer}`,
+        score: Math.min(resultData.score + 6, 100),
+        confidence: Math.min(resultData.confidenceScore + 6, 100),
+        fluency: Math.min(resultData.fluencyScore + 6, 100),
+        mistake: resultData.mistake,
+        correctedSentence: repeatAnswer,
+      });
+
       return;
     }
 
     if (repeatState === "saved") {
       setRepeatState("idle");
       setPracticeState("idle");
+      resetResultData(selectedStory, selectedQuestionIndex);
       return;
     }
 
@@ -575,8 +633,14 @@ export default function ReadingListeningScreen() {
     }
   };
 
+  const startRepeatFromPopup = () => {
+    setShowResultPopup(false);
+    setPracticeState("idle");
+    setRepeatState("recording");
+  };
+
   const getDynamicButtonText = () => {
-    if (repeatState === "recording") return "Stop Repeat";
+    if (repeatState === "recording") return "Save Repeat";
     if (repeatState === "saved") return "Practice Again";
     if (practiceState === "recording") return "Stop & Check";
     if (practiceState === "checked") return "Repeat";
@@ -584,7 +648,7 @@ export default function ReadingListeningScreen() {
   };
 
   const getDynamicButtonIcon = (): keyof typeof Ionicons.glyphMap => {
-    if (repeatState === "recording") return "stop";
+    if (repeatState === "recording") return "checkmark-outline";
     if (repeatState === "saved") return "refresh-outline";
     if (practiceState === "recording") return "stop";
     if (practiceState === "checked") return "repeat-outline";
@@ -597,6 +661,8 @@ export default function ReadingListeningScreen() {
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        bounces={false}
+        overScrollMode="never"
       >
         <View style={styles.header}>
           <TouchableOpacity
@@ -620,6 +686,8 @@ export default function ReadingListeningScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.storyTabs}
+          bounces={false}
+          overScrollMode="never"
         >
           {stories.map((story) => {
             const active = selectedStory.title === story.title;
@@ -762,7 +830,7 @@ export default function ReadingListeningScreen() {
                 size={18}
                 color={ACTION_COLOR}
               />
-              <Text style={styles.listenButtonText}>Listening</Text>
+              <Text style={styles.listenButtonText}>Listen</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -833,18 +901,22 @@ export default function ReadingListeningScreen() {
             <ScrollView
               style={styles.modalScroll}
               showsVerticalScrollIndicator={false}
+              bounces={false}
+              overScrollMode="never"
             >
               <View style={styles.scoreRow}>
                 <View style={styles.scoreBox}>
-                  <Text style={styles.scoreValue}>{resultData.score}%</Text>
-                  <Text style={styles.scoreLabel}>Overall</Text>
+                  <Text style={styles.scoreValue}>
+                    {resultData.fluencyScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Fluency</Text>
                 </View>
 
                 <View style={styles.scoreBox}>
                   <Text style={styles.scoreValue}>
-                    {resultData.listeningScore}%
+                    {resultData.confidenceScore}%
                   </Text>
-                  <Text style={styles.scoreLabel}>Listening</Text>
+                  <Text style={styles.scoreLabel}>Confidence</Text>
                 </View>
 
                 <View style={styles.scoreBox}>
@@ -854,6 +926,20 @@ export default function ReadingListeningScreen() {
                   <Text style={styles.scoreLabel}>Speaking</Text>
                 </View>
               </View>
+
+              {!resultData.usedBackend && (
+                <View style={styles.fallbackNotice}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={18}
+                    color="#92400E"
+                  />
+                  <Text style={styles.fallbackNoticeText}>
+                    Local fallback result used. Backend connection can be tested
+                    again after this screen is stable.
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.userAnswerBox}>
                 <Text style={styles.userAnswerLabel}>Your Answer</Text>
@@ -884,18 +970,6 @@ export default function ReadingListeningScreen() {
                 <Text style={styles.mistakeTitle}>Mistake / Focus</Text>
                 <Text style={styles.mistakeText}>{resultData.mistake}</Text>
               </View>
-
-              <View style={styles.repeatAccuracyBox}>
-                <Text style={styles.repeatAccuracyLabel}>Repeat Accuracy</Text>
-                <Text style={styles.repeatAccuracyValue}>
-                  {resultData.repeatAccuracy}%
-                </Text>
-              </View>
-
-              <View style={styles.coachBox}>
-                <Text style={styles.coachTitle}>Coach Tip</Text>
-                <Text style={styles.coachText}>{resultData.coachTip}</Text>
-              </View>
             </ScrollView>
 
             <View style={styles.modalActionRow}>
@@ -914,11 +988,7 @@ export default function ReadingListeningScreen() {
 
               <TouchableOpacity
                 style={styles.modalPrimaryButton}
-                onPress={() => {
-                  setShowResultPopup(false);
-                  setRepeatState("recording");
-                  setPracticeState("idle");
-                }}
+                onPress={startRepeatFromPopup}
                 activeOpacity={0.85}
               >
                 <Ionicons name="repeat-outline" size={18} color="#FFFFFF" />
@@ -1336,6 +1406,26 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
+  fallbackNotice: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  fallbackNoticeText: {
+    flex: 1,
+    marginLeft: 7,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400E",
+    fontWeight: "800",
+  },
+
   userAnswerBox: {
     backgroundColor: "#FEF2F2",
     borderRadius: 16,
@@ -1420,52 +1510,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: "#991B1B",
-    fontWeight: "700",
-  },
-
-  repeatAccuracyBox: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 16,
-    padding: 13,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-
-  repeatAccuracyLabel: {
-    fontSize: 13,
-    color: "#334155",
-    fontWeight: "900",
-  },
-
-  repeatAccuracyValue: {
-    fontSize: 14,
-    color: ACTION_COLOR,
-    fontWeight: "900",
-  },
-
-  coachBox: {
-    backgroundColor: "#EEF2FF",
-    borderRadius: 16,
-    padding: 13,
-    borderWidth: 1,
-    borderColor: "#C7D2FE",
-    marginBottom: 4,
-  },
-
-  coachTitle: {
-    fontSize: 14,
-    color: "#0F172A",
-    fontWeight: "900",
-    marginBottom: 6,
-  },
-
-  coachText: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: "#334155",
     fontWeight: "700",
   },
 
