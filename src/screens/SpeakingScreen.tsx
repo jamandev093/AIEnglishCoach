@@ -12,8 +12,10 @@ import {
   View,
 } from "react-native";
 
+import { Audio } from "expo-av";
+
 import {
-  analyzeSentenceWithBackend,
+  analyzeSpeechWithBackend,
   type AnalyzeApiResponse,
 } from "../config/api";
 import { addActivity } from "../utils/activityHistory";
@@ -158,7 +160,7 @@ export default function SpeakingScreen() {
     buildFallbackResult(suggestedSentences[0])
   );
   const [showResultPopup, setShowResultPopup] = useState(false);
-
+    const recordingRef = useRef<Audio.Recording | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(14)).current;
   const barTwo = useRef(new Animated.Value(30)).current;
@@ -320,18 +322,17 @@ export default function SpeakingScreen() {
     }
   };
 
-  const analyzeSpeakingWithBackend = async () => {
-    const simulatedSpokenText = selectedSentence.simulatedMistake;
-
+  
+    const analyzeSpeakingWithBackend = async (audioUri: string) => {
     try {
-      const apiResult = await analyzeSentenceWithBackend(simulatedSpokenText);
+      const apiResult = await analyzeSpeechWithBackend(audioUri);
       const mappedResult = mapBackendResult(selectedSentence, apiResult);
 
       setResult(mappedResult);
       await saveSpeakingActivity(mappedResult);
       return mappedResult;
     } catch (error) {
-      console.log("Speaking backend fallback:", error);
+      console.log("Speaking speech backend fallback:", error);
 
       const fallbackResult = buildFallbackResult(selectedSentence);
 
@@ -340,9 +341,106 @@ export default function SpeakingScreen() {
       return fallbackResult;
     }
   };
+  
+    const startAudioRecording = async () => {
+    try {
+      Speech.stop();
 
-  const chooseSentence = (item: SuggestedSentence) => {
+      const permission = await Audio.requestPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert(
+          "Microphone permission needed",
+          "Please allow microphone access to practice speaking."
+        );
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+        playThroughEarpieceAndroid: false,
+      });
+
+      const recording = new Audio.Recording();
+
+      await recording.prepareToRecordAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      await recording.startAsync();
+
+      recordingRef.current = recording;
+      setMode("recording");
+    } catch (error) {
+      console.log("Failed to start audio recording:", error);
+
+      recordingRef.current = null;
+      setMode("idle");
+
+      Alert.alert(
+        "Recording error",
+        "Could not start recording. Please try again."
+      );
+    }
+  };
+
+  const stopAudioRecordingAndAnalyze = async () => {
+    try {
+      const recording = recordingRef.current;
+
+      if (!recording) {
+        throw new Error("No active recording found");
+      }
+
+      await recording.stopAndUnloadAsync();
+
+      const audioUri = recording.getURI();
+
+      recordingRef.current = null;
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      if (!audioUri) {
+        throw new Error("Recording URI not found");
+      }
+
+      await analyzeSpeakingWithBackend(audioUri);
+
+      setMode("analyzed");
+      setShowResultPopup(true);
+    } catch (error) {
+      console.log("Failed to stop/analyze audio:", error);
+
+      recordingRef.current = null;
+
+      const fallbackResult = buildFallbackResult(selectedSentence);
+      setResult(fallbackResult);
+      await saveSpeakingActivity(fallbackResult);
+
+      setMode("analyzed");
+      setShowResultPopup(true);
+    }
+  };
+
+    const chooseSentence = async (item: SuggestedSentence) => {
     Speech.stop();
+
+    if (recordingRef.current) {
+      try {
+        await recordingRef.current.stopAndUnloadAsync();
+      } catch (error) {
+        console.log("Failed to stop recording while changing sentence:", error);
+      }
+
+      recordingRef.current = null;
+    }
+
     setSelectedSentence(item);
     setMode("idle");
     setRepeatMode("idle");
@@ -362,16 +460,15 @@ export default function SpeakingScreen() {
       setMode("idle");
       return;
     }
+    
 
-    if (mode === "idle") {
-      setMode("recording");
+        if (mode === "idle") {
+      await startAudioRecording();
       return;
     }
 
     if (mode === "recording") {
-      await analyzeSpeakingWithBackend();
-      setMode("analyzed");
-      setShowResultPopup(true);
+      await stopAudioRecordingAndAnalyze();
       return;
     }
 
@@ -387,10 +484,10 @@ export default function SpeakingScreen() {
     setRepeatMode("recording");
   };
 
-  const handleTryAgainFromPopup = () => {
+     const handleTryAgainFromPopup = async () => {
     setShowResultPopup(false);
     setRepeatMode("idle");
-    setMode("recording");
+    await startAudioRecording();
   };
 
   const handleLivePress = () => {
