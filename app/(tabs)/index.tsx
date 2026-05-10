@@ -159,13 +159,13 @@ export default function HomeScreen() {
     router.push(route as any);
   };
 
-    const openSpeakingTopic = (topic: TopicItem) => {
-  router.push({
-    pathname: "/topicSpeaking",
-    params: {
-      topic: topic.title,
-    },
-  } as any);
+  const openSpeakingTopic = (topic: TopicItem) => {
+    router.push({
+      pathname: "/topicSpeaking",
+      params: {
+        topic: topic.title,
+      },
+    } as any);
   };
 
   const renderFeatureIcon = (feature: FeatureCard) => {
@@ -188,17 +188,15 @@ export default function HomeScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* Welcome */}
       <View style={styles.welcomeBox}>
         <Text style={styles.welcomeText}>Welcome back 👋</Text>
         <Text style={styles.appTitle}>AI English Coach</Text>
       </View>
 
-      {/* Compact Today's Mission */}
       <TouchableOpacity
         style={styles.compactActionCard}
         activeOpacity={0.86}
-        onPress={() => router.push("/speaking")}
+        onPress={() => router.push("/speaking" as any)}
       >
         <View style={styles.compactIconBox}>
           <Ionicons name="mic-outline" size={24} color={ACTION_COLOR} />
@@ -224,7 +222,6 @@ export default function HomeScreen() {
         <Ionicons name="chevron-forward" size={24} color="#94A3B8" />
       </TouchableOpacity>
 
-      {/* Compact Confidence Card */}
       <TouchableOpacity
         style={styles.compactConfidenceCard}
         activeOpacity={0.86}
@@ -260,7 +257,6 @@ export default function HomeScreen() {
         </View>
       </TouchableOpacity>
 
-      {/* Topics Section Header */}
       <TouchableOpacity
         style={styles.topicSectionHeader}
         activeOpacity={0.86}
@@ -278,7 +274,6 @@ export default function HomeScreen() {
         </View>
       </TouchableOpacity>
 
-      {/* Horizontal Topic Cards */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -298,7 +293,6 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
 
-      {/* Feature Cards */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Build Real Speaking Skill</Text>
       </View>
