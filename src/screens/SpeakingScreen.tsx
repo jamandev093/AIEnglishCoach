@@ -12,8 +12,11 @@ import {
   View,
 } from "react-native";
 
+import {
+  analyzeSentenceWithBackend,
+  type AnalyzeApiResponse,
+} from "../config/api";
 import { addActivity } from "../utils/activityHistory";
-
 type SpeakingMode = "idle" | "recording" | "analyzed";
 type RepeatMode = "idle" | "recording" | "saved";
 
@@ -21,61 +24,129 @@ type SpeakingResult = {
   spokenText: string;
   correctedSentence: string;
   score: number;
-  pronunciationScore: number;
+  confidenceScore: number;
   fluencyScore: number;
-  repeatAccuracy: number;
+  speakingScore: number;
   mistakes: string[];
   correction: string;
   simpleExplanation: string;
   mistakeMemory: string[];
   coachReply: string;
+  repeatSentence: string;
+  usedBackend: boolean;
 };
 
 type SuggestedSentence = {
   text: string;
   purpose: string;
+  simulatedMistake: string;
 };
 
 const ACTION_COLOR = "#8499DC";
+const RECORDING_COLOR = "#DC2626";
 
 const suggestedSentences: SuggestedSentence[] = [
   {
     text: "I went to the market.",
     purpose: "Past action",
+    simulatedMistake: "I go market",
   },
   {
     text: "I go to school every day.",
     purpose: "Daily routine",
+    simulatedMistake: "I go school every day",
   },
   {
     text: "I am learning English.",
     purpose: "Present action",
+    simulatedMistake: "I learning English",
   },
   {
     text: "Could you repeat that slowly?",
     purpose: "Real conversation",
+    simulatedMistake: "Can you repeat slow",
   },
 ];
 
-const demoResult: SpeakingResult = {
-  spokenText: "I go market",
-  correctedSentence: "I went to the market.",
-  score: 72,
-  pronunciationScore: 68,
-  fluencyScore: 66,
-  repeatAccuracy: 70,
-  mistakes: ["Past tense", "Missing “to”", "Missing “the”"],
-  correction: "Say: I went to the market.",
-  simpleExplanation:
-    "You are talking about a past action, so use “went”. We also say “go to a place”, so “to” is needed before “market”.",
-  mistakeMemory: [
-    "You often miss “to” before places.",
-    "Past tense needs more practice.",
-    "Use “the” before a specific place.",
-  ],
-  coachReply:
-    "Good try. Now repeat the corrected sentence slowly: I went to the market.",
-};
+function buildFallbackResult(sentence: SuggestedSentence): SpeakingResult {
+  return {
+    spokenText: sentence.simulatedMistake,
+    correctedSentence: sentence.text,
+    score: 72,
+    confidenceScore: 70,
+    fluencyScore: 66,
+    speakingScore: 72,
+    mistakes: ["Grammar / sentence structure", "Speaking clarity practice"],
+    correction: `Say: ${sentence.text}`,
+    simpleExplanation:
+      "Local fallback result used. Your sentence was improved into a clearer and more natural version.",
+    mistakeMemory: [
+      "Practice full sentence structure.",
+      "Speak slowly before increasing speed.",
+      "Repeat the corrected sentence until it feels natural.",
+    ],
+    coachReply: `Good try. Now repeat slowly: ${sentence.text}`,
+    repeatSentence: sentence.text,
+    usedBackend: false,
+  };
+}
+
+function mapBackendResult(
+  sentence: SuggestedSentence,
+  apiResult: AnalyzeApiResponse
+): SpeakingResult {
+  const backendScore =
+    typeof apiResult.score === "number" && !Number.isNaN(apiResult.score)
+      ? apiResult.score
+      : 72;
+
+  const correctedSentence =
+    apiResult.correctedText ||
+    apiResult.improved ||
+    apiResult.repeatSentence ||
+    sentence.text;
+
+  const mistakes =
+    Array.isArray(apiResult.mistakes) && apiResult.mistakes.length > 0
+      ? apiResult.mistakes
+      : ["No major mistake found"];
+
+  return {
+    spokenText: apiResult.originalText || sentence.simulatedMistake,
+    correctedSentence,
+    score: backendScore,
+    confidenceScore:
+      typeof apiResult.confidenceScore === "number"
+        ? apiResult.confidenceScore
+        : Math.min(backendScore + 2, 100),
+    fluencyScore:
+      typeof apiResult.fluencyScore === "number"
+        ? apiResult.fluencyScore
+        : Math.max(backendScore - 4, 0),
+    speakingScore:
+      typeof apiResult.pronunciationScore === "number"
+        ? apiResult.pronunciationScore
+        : backendScore,
+    mistakes,
+    correction:
+      apiResult.simpleExplanation || `Say this better: ${correctedSentence}`,
+    simpleExplanation:
+      apiResult.teacherExplanation ||
+      apiResult.simpleExplanation ||
+      "The backend checked your sentence and improved it for clearer speaking.",
+    mistakeMemory: [
+      mistakes.join(", "),
+      "Repeat the corrected sentence clearly.",
+      "Save this mistake pattern to improve future speaking.",
+    ],
+    coachReply:
+      apiResult.coachReply ||
+      apiResult.smartSuggestion ||
+      `Good effort. Now repeat slowly: ${correctedSentence}`,
+    repeatSentence: apiResult.repeatSentence || correctedSentence,
+    usedBackend: true,
+  };
+}
 
 export default function SpeakingScreen() {
   const [mode, setMode] = useState<SpeakingMode>("idle");
@@ -83,7 +154,9 @@ export default function SpeakingScreen() {
   const [selectedSentence, setSelectedSentence] = useState<SuggestedSentence>(
     suggestedSentences[0]
   );
-  const [result, setResult] = useState<SpeakingResult>(demoResult);
+  const [result, setResult] = useState<SpeakingResult>(
+    buildFallbackResult(suggestedSentences[0])
+  );
   const [showResultPopup, setShowResultPopup] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -220,7 +293,7 @@ export default function SpeakingScreen() {
         title: "Speaking practice",
         detail: `Spoke: ${analysis.spokenText} → ${analysis.correctedSentence}`,
         score: analysis.score,
-        confidence: 64,
+        confidence: analysis.confidenceScore,
         fluency: analysis.fluencyScore,
         mistake: analysis.mistakes.join(", "),
         correctedSentence: analysis.correctedSentence,
@@ -235,49 +308,82 @@ export default function SpeakingScreen() {
       await addActivity({
         type: "speaking",
         title: "Speaking repeat practice",
-        detail: `Repeated: ${result.correctedSentence}`,
-        score: result.repeatAccuracy,
-        confidence: 70,
-        fluency: result.fluencyScore,
-        correctedSentence: result.correctedSentence,
+        detail: `Repeated: ${result.repeatSentence}`,
+        score: Math.min(result.score + 6, 100),
+        confidence: Math.min(result.confidenceScore + 6, 100),
+        fluency: Math.min(result.fluencyScore + 6, 100),
+        mistake: result.mistakes.join(", "),
+        correctedSentence: result.repeatSentence,
       });
     } catch (error) {
       console.log("Failed to save repeat activity:", error);
     }
   };
 
-  const handleMainButton = async () => {
-    if (mode === "idle") {
-      setRepeatMode("idle");
-      setMode("recording");
-      return;
-    }
+  const analyzeSpeakingWithBackend = async () => {
+    const simulatedSpokenText = selectedSentence.simulatedMistake;
 
-    if (mode === "recording") {
-      setMode("analyzed");
-      setResult(demoResult);
-      setShowResultPopup(true);
-      await saveSpeakingActivity(demoResult);
-      return;
-    }
+    try {
+      const apiResult = await analyzeSentenceWithBackend(simulatedSpokenText);
+      const mappedResult = mapBackendResult(selectedSentence, apiResult);
 
-    setRepeatMode("idle");
-    setMode("recording");
+      setResult(mappedResult);
+      await saveSpeakingActivity(mappedResult);
+      return mappedResult;
+    } catch (error) {
+      console.log("Speaking backend fallback:", error);
+
+      const fallbackResult = buildFallbackResult(selectedSentence);
+
+      setResult(fallbackResult);
+      await saveSpeakingActivity(fallbackResult);
+      return fallbackResult;
+    }
   };
 
-  const handleRepeatButton = async () => {
-    setShowResultPopup(false);
+  const chooseSentence = (item: SuggestedSentence) => {
+    Speech.stop();
+    setSelectedSentence(item);
     setMode("idle");
-    setRepeatMode("recording");
+    setRepeatMode("idle");
+    setShowResultPopup(false);
+    setResult(buildFallbackResult(item));
   };
 
-  const handleStopRepeat = async () => {
+  const handleMainButton = async () => {
     if (repeatMode === "recording") {
       setRepeatMode("saved");
       await saveRepeatActivity();
       return;
     }
 
+    if (repeatMode === "saved") {
+      setRepeatMode("idle");
+      setMode("idle");
+      return;
+    }
+
+    if (mode === "idle") {
+      setMode("recording");
+      return;
+    }
+
+    if (mode === "recording") {
+      await analyzeSpeakingWithBackend();
+      setMode("analyzed");
+      setShowResultPopup(true);
+      return;
+    }
+
+    if (mode === "analyzed") {
+      setRepeatMode("idle");
+      setMode("recording");
+    }
+  };
+
+  const startRepeatFromPopup = () => {
+    setShowResultPopup(false);
+    setMode("idle");
     setRepeatMode("recording");
   };
 
@@ -290,29 +396,25 @@ export default function SpeakingScreen() {
   const handleLivePress = () => {
     Alert.alert(
       "Live conversation coming later",
-      "Gemini Live-style conversation needs backend streaming, real-time speech, and AI session handling. We will add this after the speaking engine is stable."
+      "Live AI teacher conversation needs real-time speech, backend session handling, and streaming. We will add it after the speaking engine is stable."
     );
   };
 
-  const dynamicButtonText =
-  repeatMode === "recording"
-    ? "Recording..."
-    : repeatMode === "saved"
-    ? "Repeat Again"
-    : mode === "recording"
-    ? "Recording..."
-    : "Practice Again";
+  const getMainButtonText = () => {
+    if (repeatMode === "recording") return "Save Repeat";
+    if (repeatMode === "saved") return "Practice Again";
+    if (mode === "recording") return "Stop & Check";
+    if (mode === "analyzed") return "Practice Again";
+    return "Start Speaking";
+  };
 
-const dynamicButtonIcon =
-  repeatMode === "recording"
-    ? "radio-button-on-outline"
-    : repeatMode === "saved"
-    ? "refresh-outline"
-    : mode === "recording"
-    ? "radio-button-on-outline"
-    : mode === "analyzed"
-    ? "refresh-outline"
-    : "mic-outline";
+  const getMainButtonIcon = (): keyof typeof Ionicons.glyphMap => {
+    if (repeatMode === "recording") return "checkmark-outline";
+    if (repeatMode === "saved") return "refresh-outline";
+    if (mode === "recording") return "stop";
+    if (mode === "analyzed") return "refresh-outline";
+    return "mic-outline";
+  };
 
   return (
     <>
@@ -321,7 +423,6 @@ const dynamicButtonIcon =
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>AI English Coach</Text>
@@ -333,11 +434,14 @@ const dynamicButtonIcon =
           </View>
         </View>
 
-        {/* Sentence Suggestions - replaces Real Speaking Coach card */}
         <View style={styles.suggestionCard}>
           <View style={styles.cardTopRow}>
             <View style={styles.cardIcon}>
-              <Ionicons name="chatbubbles-outline" size={23} color={ACTION_COLOR} />
+              <Ionicons
+                name="chatbubbles-outline"
+                size={23}
+                color={ACTION_COLOR}
+              />
             </View>
 
             <View style={styles.cardTitleBox}>
@@ -363,11 +467,7 @@ const dynamicButtonIcon =
                     styles.sentenceCard,
                     active && styles.sentenceCardActive,
                   ]}
-                  onPress={() => {
-                    setSelectedSentence(item);
-                    setMode("idle");
-                    setRepeatMode("idle");
-                  }}
+                  onPress={() => chooseSentence(item)}
                   activeOpacity={0.85}
                 >
                   <Text
@@ -393,7 +493,6 @@ const dynamicButtonIcon =
           </ScrollView>
         </View>
 
-        {/* Practice Sentence Card */}
         <View style={styles.practiceCard}>
           <View style={styles.practiceTopRow}>
             <View style={styles.practiceTextBox}>
@@ -426,14 +525,14 @@ const dynamicButtonIcon =
               style={[
                 styles.micCircle,
                 isListening && {
-                  backgroundColor: ACTION_COLOR,
-                  borderColor: ACTION_COLOR,
+                  backgroundColor: RECORDING_COLOR,
+                  borderColor: RECORDING_COLOR,
                   transform: [{ scale: pulseAnim }],
                 },
               ]}
             >
               <Ionicons
-                name={isListening ? "mic" : "mic-outline"}
+                name={isListening ? "radio-button-on" : "mic-outline"}
                 size={34}
                 color={isListening ? "#FFFFFF" : ACTION_COLOR}
               />
@@ -482,86 +581,45 @@ const dynamicButtonIcon =
           )}
 
           <View style={styles.lowerActionRow}>
-  <TouchableOpacity
-    style={[
-      styles.dynamicActionButton,
-      (mode === "recording" || repeatMode === "recording") &&
-        styles.dynamicActionButtonRecording,
-    ]}
-    onPress={
-      repeatMode === "recording" || repeatMode === "saved"
-        ? handleStopRepeat
-        : handleMainButton
-    }
-    activeOpacity={0.85}
-  >
-    <Ionicons
-      name={dynamicButtonIcon as any}
-      size={18}
-      color="#FFFFFF"
-    />
-    <Text style={styles.dynamicActionText}>{dynamicButtonText}</Text>
-  </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.dynamicActionButton,
+                isListening && styles.dynamicActionButtonRecording,
+              ]}
+              onPress={handleMainButton}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={getMainButtonIcon()} size={18} color="#FFFFFF" />
+              <Text style={styles.dynamicActionText}>
+                {getMainButtonText()}
+              </Text>
+            </TouchableOpacity>
 
-  <TouchableOpacity
-    style={styles.liveButton}
-    onPress={handleLivePress}
-    activeOpacity={0.85}
-  >
-    <Ionicons name="radio-outline" size={18} color="#FFFFFF" />
-    <Text style={styles.liveButtonText}>Live</Text>
-  </TouchableOpacity>
-</View>
+            <TouchableOpacity
+              style={styles.liveButton}
+              onPress={handleLivePress}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="radio-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.liveButtonText}>Live</Text>
+            </TouchableOpacity>
+          </View>
 
-          {mode === "analyzed" && (
+          {mode === "analyzed" && repeatMode !== "recording" && (
             <TouchableOpacity
               style={styles.openResultButton}
               onPress={() => setShowResultPopup(true)}
               activeOpacity={0.85}
             >
               <Ionicons name="expand-outline" size={18} color={ACTION_COLOR} />
-              <Text style={styles.openResultButtonText}>Open Speaking Result</Text>
+              <Text style={styles.openResultButtonText}>
+                Open Speaking Result
+              </Text>
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Backend Upgrade Card */}
-        <View style={styles.futureCard}>
-          <View style={styles.futureHeaderRow}>
-            <View style={styles.futureIcon}>
-              <Ionicons name="server-outline" size={22} color={ACTION_COLOR} />
-            </View>
-
-            <View style={styles.futureTitleBox}>
-              <Text style={styles.futureTitle}>Backend Upgrades Later</Text>
-              <Text style={styles.futureSubtitle}>
-                These need real backend work, so we keep them planned but not
-                distracting on the main screen.
-              </Text>
-            </View>
-          </View>
-
-          {[
-            "Real microphone upload",
-            "Speech-to-text analysis",
-            "Pronunciation scoring",
-            "Fluency scoring",
-            "Repeat accuracy",
-            "Live conversation session",
-          ].map((item) => (
-            <View key={item} style={styles.futureItemRow}>
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={18}
-                color={ACTION_COLOR}
-              />
-              <Text style={styles.futureItemText}>{item}</Text>
-            </View>
-          ))}
-        </View>
       </ScrollView>
 
-      {/* Speaking Result Popup */}
       <Modal
         visible={showResultPopup}
         transparent
@@ -572,7 +630,11 @@ const dynamicButtonIcon =
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={styles.modalIcon}>
-                <Ionicons name="sparkles-outline" size={23} color={ACTION_COLOR} />
+                <Ionicons
+                  name="sparkles-outline"
+                  size={23}
+                  color={ACTION_COLOR}
+                />
               </View>
 
               <View style={styles.modalTitleBox}>
@@ -593,30 +655,49 @@ const dynamicButtonIcon =
               style={styles.modalScroll}
               showsVerticalScrollIndicator={false}
             >
-              {/* Score Summary */}
-              <View style={styles.scoreSummaryBox}>
-                <View style={styles.scoreCircle}>
-                  <Text style={styles.scoreCircleValue}>{result.score}%</Text>
-                  <Text style={styles.scoreCircleLabel}>Total</Text>
+              <View style={styles.scoreGrid}>
+                <View style={styles.scoreBox}>
+                  <Text style={styles.scoreValue}>{result.fluencyScore}%</Text>
+                  <Text style={styles.scoreLabel}>Fluency</Text>
                 </View>
 
-                <View style={styles.scoreDetailsBox}>
-                  <ScoreRow label="Pronunciation" value={result.pronunciationScore} />
-                  <ScoreRow label="Fluency" value={result.fluencyScore} />
-                  <ScoreRow label="Repeat Accuracy" value={result.repeatAccuracy} />
+                <View style={styles.scoreBox}>
+                  <Text style={styles.scoreValue}>
+                    {result.confidenceScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Confidence</Text>
+                </View>
+
+                <View style={styles.scoreBox}>
+                  <Text style={styles.scoreValue}>{result.speakingScore}%</Text>
+                  <Text style={styles.scoreLabel}>Speaking</Text>
                 </View>
               </View>
 
-              {/* User Said */}
+              {!result.usedBackend && (
+                <View style={styles.fallbackNotice}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={18}
+                    color="#92400E"
+                  />
+                  <Text style={styles.fallbackNoticeText}>
+                    Local fallback result used. Backend connection can be tested
+                    again after this screen is stable.
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.userSaidBox}>
                 <Text style={styles.userSaidLabel}>You said</Text>
                 <Text style={styles.userSaidText}>{result.spokenText}</Text>
               </View>
 
-              {/* Correction */}
               <View style={styles.correctBox}>
                 <Text style={styles.correctLabel}>Correct sentence</Text>
-                <Text style={styles.correctText}>{result.correctedSentence}</Text>
+                <Text style={styles.correctText}>
+                  {result.correctedSentence}
+                </Text>
 
                 <TouchableOpacity
                   style={styles.modalSmallButton}
@@ -632,7 +713,6 @@ const dynamicButtonIcon =
                 </TouchableOpacity>
               </View>
 
-              {/* Mistakes */}
               <View style={styles.modalInfoBox}>
                 <View style={styles.modalInfoTopRow}>
                   <Ionicons
@@ -651,7 +731,6 @@ const dynamicButtonIcon =
                 ))}
               </View>
 
-              {/* Explanation */}
               <View style={styles.teacherBox}>
                 <View style={styles.modalInfoTopRow}>
                   <MaterialCommunityIcons
@@ -668,10 +747,9 @@ const dynamicButtonIcon =
                 </Text>
               </View>
 
-              {/* Mistake Memory */}
               <View style={styles.memoryBox}>
                 <View style={styles.modalInfoTopRow}>
-                  <Ionicons name="brain-outline" size={22} color={ACTION_COLOR} />
+                  <MaterialCommunityIcons name="brain" size={22} color={ACTION_COLOR} />
                   <Text style={styles.modalInfoTitle}>Mistake Memory</Text>
                 </View>
 
@@ -687,10 +765,35 @@ const dynamicButtonIcon =
                 ))}
               </View>
 
-              {/* Coach Reply */}
               <View style={styles.coachReplyBox}>
                 <Text style={styles.coachReplyTitle}>Coach Reply</Text>
                 <Text style={styles.coachReplyText}>{result.coachReply}</Text>
+              </View>
+
+              <View style={styles.modalRepeatBox}>
+                <View style={styles.modalRepeatTopRow}>
+                  <View style={styles.modalRepeatIcon}>
+                    <Ionicons
+                      name="mic-outline"
+                      size={23}
+                      color={ACTION_COLOR}
+                    />
+                  </View>
+
+                  <View style={styles.modalRepeatTextBox}>
+                    <Text style={styles.modalRepeatTitle}>Repeat It</Text>
+                    <Text style={styles.modalRepeatSubtitle}>
+                      Repeat the corrected sentence to build real speaking
+                      confidence.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.modalRepeatSentenceBox}>
+                  <Text style={styles.modalRepeatSentence}>
+                    {result.repeatSentence}
+                  </Text>
+                </View>
               </View>
             </ScrollView>
 
@@ -706,7 +809,7 @@ const dynamicButtonIcon =
 
               <TouchableOpacity
                 style={styles.modalPrimaryButton}
-                onPress={handleRepeatButton}
+                onPress={startRepeatFromPopup}
                 activeOpacity={0.85}
               >
                 <Ionicons name="mic-outline" size={18} color="#FFFFFF" />
@@ -717,15 +820,6 @@ const dynamicButtonIcon =
         </View>
       </Modal>
     </>
-  );
-}
-
-function ScoreRow({ label, value }: { label: string; value: number }) {
-  return (
-    <View style={styles.scoreRow}>
-      <Text style={styles.scoreRowLabel}>{label}</Text>
-      <Text style={styles.scoreRowValue}>{value}%</Text>
-    </View>
   );
 }
 
@@ -908,8 +1002,8 @@ const styles = StyleSheet.create({
   },
 
   recordingBoxActive: {
-    backgroundColor: "#EEF2FF",
-    borderColor: "#C7D2FE",
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
   },
 
   micCircle: {
@@ -941,7 +1035,7 @@ const styles = StyleSheet.create({
   waveBar: {
     width: 8,
     borderRadius: 999,
-    backgroundColor: ACTION_COLOR,
+    backgroundColor: RECORDING_COLOR,
   },
 
   recordingTitle: {
@@ -979,54 +1073,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  mainButton: {
-    height: 52,
-    borderRadius: 17,
-    backgroundColor: ACTION_COLOR,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    marginTop: 16,
-  },
-
-  mainButtonRecording: {
-    backgroundColor: "#111827",
-  },
-
-  mainButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "900",
-    marginLeft: 8,
-  },
-
   lowerActionRow: {
     flexDirection: "row",
     gap: 10,
     marginTop: 12,
   },
 
-  smallActionButton: {
-    flex: 1,
-    height: 44,
-    borderRadius: 15,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-  },
-
-  smallActionText: {
-    marginLeft: 6,
-    color: ACTION_COLOR,
-    fontSize: 13,
-    fontWeight: "900",
-  },
-
   liveButton: {
     width: 96,
-    height: 44,
-    borderRadius: 15,
+    height: 48,
+    borderRadius: 16,
     backgroundColor: ACTION_COLOR,
     alignItems: "center",
     justifyContent: "center",
@@ -1039,28 +1095,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
   },
-    
-   dynamicActionButton: {
-  flex: 1,
-  height: 48,
-  borderRadius: 16,
-  backgroundColor: ACTION_COLOR,
-  alignItems: "center",
-  justifyContent: "center",
-  flexDirection: "row",
-},
 
-dynamicActionButtonRecording: {
-  backgroundColor: "#f30606",
-},
+  dynamicActionButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: ACTION_COLOR,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
 
-dynamicActionText: {
-  marginLeft: 7,
-  color: "#FFFFFF",
-  fontSize: 14,
-  fontWeight: "900",
-},
+  dynamicActionButtonRecording: {
+    backgroundColor: RECORDING_COLOR,
+  },
 
+  dynamicActionText: {
+    marginLeft: 7,
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "900",
+  },
 
   openResultButton: {
     marginTop: 12,
@@ -1079,64 +1134,6 @@ dynamicActionText: {
     color: ACTION_COLOR,
     fontSize: 13,
     fontWeight: "900",
-  },
-
-  futureCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 24,
-  },
-
-  futureHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 13,
-  },
-
-  futureIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-
-  futureTitleBox: {
-    flex: 1,
-  },
-
-  futureTitle: {
-    fontSize: 17,
-    color: "#0F172A",
-    fontWeight: "900",
-    marginBottom: 5,
-  },
-
-  futureSubtitle: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: "#64748B",
-    fontWeight: "600",
-  },
-
-  futureItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 9,
-  },
-
-  futureItemText: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 13,
-    lineHeight: 19,
-    color: "#334155",
-    fontWeight: "700",
   },
 
   modalOverlay: {
@@ -1201,60 +1198,51 @@ dynamicActionText: {
     maxHeight: 500,
   },
 
-  scoreSummaryBox: {
-    backgroundColor: "#EEF2FF",
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#C7D2FE",
+  scoreGrid: {
     flexDirection: "row",
+    gap: 10,
     marginBottom: 12,
   },
 
-  scoreCircle: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 13,
-  },
-
-  scoreCircleValue: {
-    fontSize: 22,
-    color: ACTION_COLOR,
-    fontWeight: "900",
-  },
-
-  scoreCircleLabel: {
-    fontSize: 11,
-    color: "#64748B",
-    fontWeight: "900",
-    marginTop: 2,
-  },
-
-  scoreDetailsBox: {
+  scoreBox: {
     flex: 1,
-    justifyContent: "center",
+    backgroundColor: "#EEF2FF",
+    borderRadius: 16,
+    padding: 13,
+    alignItems: "center",
   },
 
-  scoreRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: 5,
-  },
-
-  scoreRowLabel: {
-    fontSize: 12,
-    color: "#334155",
-    fontWeight: "800",
-  },
-
-  scoreRowValue: {
-    fontSize: 12,
+  scoreValue: {
+    fontSize: 18,
     color: ACTION_COLOR,
     fontWeight: "900",
+    marginBottom: 4,
+  },
+
+  scoreLabel: {
+    fontSize: 11,
+    color: "#334155",
+    fontWeight: "900",
+  },
+
+  fallbackNotice: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  fallbackNoticeText: {
+    flex: 1,
+    marginLeft: 7,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400E",
+    fontWeight: "800",
   },
 
   userSaidBox: {
@@ -1411,7 +1399,7 @@ dynamicActionText: {
     padding: 13,
     borderWidth: 1,
     borderColor: "#C7D2FE",
-    marginBottom: 4,
+    marginBottom: 12,
   },
 
   coachReplyTitle: {
@@ -1426,6 +1414,64 @@ dynamicActionText: {
     lineHeight: 21,
     color: "#334155",
     fontWeight: "700",
+  },
+
+  modalRepeatBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 4,
+  },
+
+  modalRepeatTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  modalRepeatIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+
+  modalRepeatTextBox: {
+    flex: 1,
+  },
+
+  modalRepeatTitle: {
+    fontSize: 15,
+    color: "#0F172A",
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+
+  modalRepeatSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+    fontWeight: "700",
+  },
+
+  modalRepeatSentenceBox: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  modalRepeatSentence: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: "#0F172A",
+    fontWeight: "900",
   },
 
   modalActionRow: {

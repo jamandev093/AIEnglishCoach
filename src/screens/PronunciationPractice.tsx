@@ -10,8 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
-import ConfettiCannon from 'react-native-confetti-cannon';
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const words = [
   { word: 'Hello', ipa: '/həˈloʊ/' },
   { word: 'World', ipa: '/wɜːrld/' },
@@ -26,11 +26,11 @@ const RADIUS = (SIZE - STROKE_WIDTH) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export default function PronunciationPractice() {
-  const [index, setIndex] = useState(0);
+  const [index, ] = useState(0);
   const [recording, setRecording] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [streak] = useState(5);
-  const [showConfetti, setShowConfetti] = useState(false);
+ 
   const [scoreHistory, setScoreHistory] = useState<number[]>([]);
 
   const waveAnim = useRef(new Animated.Value(1)).current;
@@ -94,10 +94,7 @@ export default function PronunciationPractice() {
 
     await playSound();
 
-    if (randomScore >= 95) {
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 3000);
-    }
+    
   };
 
   const progressPercent = ((index + 1) / words.length) * 100;
@@ -105,10 +102,7 @@ export default function PronunciationPractice() {
   return (
     <View style={styles.container}>
 
-      {showConfetti && (
-        <ConfettiCannon count={150} origin={{ x: 200, y: 0 }} />
-      )}
-
+      
       {/* TOP BAR */}
       <View style={styles.topBar}>
         <Text style={styles.streak}>🔥 {streak} Day Streak</Text>
@@ -171,7 +165,7 @@ export default function PronunciationPractice() {
               r={RADIUS}
               strokeWidth={STROKE_WIDTH}
             />
-            <Animated.Circle
+            <AnimatedCircle
               stroke="#2a9d8f"
               fill="none"
               cx={SIZE / 2}
