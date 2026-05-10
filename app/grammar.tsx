@@ -13,18 +13,22 @@ import {
   View,
 } from "react-native";
 
+import {
+  analyzeSentenceWithBackend,
+  type AnalyzeApiResponse,
+} from "../src/config/api";
 import { addActivity } from "../src/utils/activityHistory";
 
 import {
   defaultProfile,
   getProfile,
-  ProfileData,
+  type ProfileData,
 } from "../src/utils/profileStore";
 
 import {
-  AppSettings,
   defaultSettings,
   getSettings,
+  type AppSettings,
 } from "../src/utils/settingsStore";
 
 import {
@@ -32,37 +36,42 @@ import {
   getLanguageModeLabel,
 } from "../src/utils/languageMode";
 
-import { analyzeSentenceWithBackend } from "../src/config/api";
-
 type CoachMode = "Easy Mode" | "Teaching Mode";
-type RepeatState = "idle" | "recording" | "done";
+type RepeatState = "idle" | "recording" | "saved";
+
+type LocalizedText = {
+  english: string;
+  hindi: string;
+  bengali: string;
+};
 
 type GrammarResult = {
   input: string;
   corrected: string;
   score: number;
+  confidenceScore: number;
+  fluencyScore: number;
+  speakingScore: number;
   mistakes: string[];
-  easyExplanation: {
-    english: string;
-    hindi: string;
-    bengali: string;
-  };
-  teacherExplanation: {
-    english: string;
-    hindi: string;
-    bengali: string;
-  };
+  easyExplanation: LocalizedText;
+  teacherExplanation: LocalizedText;
   pattern: string;
   repeatTask: string;
+  repeatSentence: string;
+  usedBackend: boolean;
 };
 
 const ACTION_COLOR = "#8499DC";
+const RECORDING_COLOR = "#DC2626";
 
 const demoResults: GrammarResult[] = [
   {
     input: "I go market",
     corrected: "I went to the market.",
     score: 62,
+    confidenceScore: 62,
+    fluencyScore: 60,
+    speakingScore: 62,
     mistakes: ["Past tense", "Missing “to”", "Missing “the”"],
     easyExplanation: {
       english:
@@ -82,11 +91,16 @@ const demoResults: GrammarResult[] = [
     },
     pattern: "I went to + place",
     repeatTask: "Repeat the corrected sentence until it feels natural.",
+    repeatSentence: "I went to the market.",
+    usedBackend: false,
   },
   {
     input: "She go school",
     corrected: "She goes to school.",
     score: 68,
+    confidenceScore: 66,
+    fluencyScore: 64,
+    speakingScore: 68,
     mistakes: ["Verb form", "Missing “to”"],
     easyExplanation: {
       english: "With “she”, use “goes”. We also say “goes to school”.",
@@ -105,11 +119,16 @@ const demoResults: GrammarResult[] = [
     },
     pattern: "She goes to + place",
     repeatTask: "Repeat the corrected sentence and notice “goes to”.",
+    repeatSentence: "She goes to school.",
+    usedBackend: false,
   },
   {
     input: "I am agree",
     corrected: "I agree.",
     score: 72,
+    confidenceScore: 70,
+    fluencyScore: 68,
+    speakingScore: 72,
     mistakes: ["Unnecessary “am”"],
     easyExplanation: {
       english: "Do not use “am” with “agree”. Say “I agree”.",
@@ -126,16 +145,88 @@ const demoResults: GrammarResult[] = [
     },
     pattern: "Subject + agree",
     repeatTask: "Repeat the corrected sentence and avoid adding “am”.",
+    repeatSentence: "I agree.",
+    usedBackend: false,
   },
 ];
 
-const futureItems = [
-  "Real backend grammar analysis",
-  "Correction while speaking",
-  "Mistake memory from repeated errors",
-  "English-Only Practice Mode support",
-  "Personal grammar drills from your history",
-];
+function buildLocalizedText(english: string): LocalizedText {
+  return {
+    english,
+    hindi: english,
+    bengali: english,
+  };
+}
+
+function buildFallbackResult(sentence: string): GrammarResult {
+  const matchedDemo =
+    demoResults.find(
+      (item) => item.input.toLowerCase() === sentence.toLowerCase()
+    ) || demoResults[0];
+
+  return {
+    ...matchedDemo,
+    input: sentence,
+    usedBackend: false,
+  };
+}
+
+function mapBackendResult(
+  sentence: string,
+  backendResult: AnalyzeApiResponse
+): GrammarResult {
+  const backendScore =
+    typeof backendResult.score === "number" &&
+    !Number.isNaN(backendResult.score)
+      ? backendResult.score
+      : 70;
+
+  const corrected =
+    backendResult.correctedText ||
+    backendResult.improved ||
+    backendResult.repeatSentence ||
+    sentence;
+
+  const simpleExplanation =
+    backendResult.simpleExplanation ||
+    "Your sentence is understandable. Repeat the corrected version slowly.";
+
+  const teacherExplanation =
+    backendResult.teacherExplanation ||
+    backendResult.simpleExplanation ||
+    "The backend checked your sentence and improved it for clearer grammar.";
+
+  return {
+    input: backendResult.originalText || sentence,
+    corrected,
+    score: backendScore,
+    confidenceScore:
+      typeof backendResult.confidenceScore === "number"
+        ? backendResult.confidenceScore
+        : Math.min(backendScore + 2, 100),
+    fluencyScore:
+      typeof backendResult.fluencyScore === "number"
+        ? backendResult.fluencyScore
+        : Math.max(backendScore - 4, 0),
+    speakingScore:
+      typeof backendResult.pronunciationScore === "number"
+        ? backendResult.pronunciationScore
+        : backendScore,
+    mistakes:
+      Array.isArray(backendResult.mistakes) && backendResult.mistakes.length > 0
+        ? backendResult.mistakes
+        : ["No major mistake found"],
+    easyExplanation: buildLocalizedText(simpleExplanation),
+    teacherExplanation: buildLocalizedText(teacherExplanation),
+    pattern: backendResult.repeatSentence || corrected,
+    repeatTask:
+      backendResult.smartSuggestion ||
+      backendResult.coachReply ||
+      "Repeat the corrected sentence slowly and clearly.",
+    repeatSentence: backendResult.repeatSentence || corrected,
+    usedBackend: true,
+  };
+}
 
 export default function GrammarCoachScreen() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
@@ -156,12 +247,16 @@ export default function GrammarCoachScreen() {
   useFocusEffect(
     useCallback(() => {
       const loadProfileAndSettings = async () => {
-        const savedProfile = await getProfile();
-        const savedSettings = await getSettings();
+        try {
+          const savedProfile = await getProfile();
+          const savedSettings = await getSettings();
 
-        setProfile(savedProfile);
-        setSettings(savedSettings);
-        setSelectedMode(savedProfile.learningMode || "Easy Mode");
+          setProfile(savedProfile);
+          setSettings(savedSettings);
+          setSelectedMode(savedProfile.learningMode || "Easy Mode");
+        } catch (error) {
+          console.log("Failed to load Grammar settings:", error);
+        }
       };
 
       loadProfileAndSettings();
@@ -280,89 +375,54 @@ export default function GrammarCoachScreen() {
     return explanation.english;
   };
 
- const analyzeSentence = async () => {
-  const cleanSentence = userSentence.trim();
+  const saveGrammarActivity = async (data: GrammarResult) => {
+    try {
+      await addActivity({
+        type: "grammar",
+        title: "Grammar correction",
+        detail: `Fixed: ${data.input} → ${data.corrected}`,
+        score: data.score,
+        confidence: data.confidenceScore,
+        fluency: data.fluencyScore,
+        mistake: data.mistakes.join(", "),
+        correctedSentence: data.corrected,
+      });
+    } catch (error) {
+      console.log("Failed to save Grammar activity:", error);
+    }
+  };
 
-  if (!cleanSentence) {
-    return;
-  }
+  const analyzeSentence = async () => {
+    const cleanSentence = userSentence.trim();
 
-  try {
-    const backendResult = await analyzeSentenceWithBackend(cleanSentence);
+    if (!cleanSentence) {
+      return;
+    }
 
-    const mappedResult: GrammarResult = {
-      input: backendResult.originalText || cleanSentence,
-      corrected:
-        backendResult.correctedText ||
-        backendResult.improved ||
-        cleanSentence,
-      score: backendResult.score || 0,
-      mistakes:
-        backendResult.mistakes && backendResult.mistakes.length > 0
-          ? backendResult.mistakes
-          : ["No major mistake found"],
-      easyExplanation: {
-        english:
-          backendResult.simpleExplanation ||
-          "Your sentence is understandable.",
-        hindi:
-          backendResult.simpleExplanation ||
-          "आपका वाक्य समझ में आता है।",
-        bengali:
-          backendResult.simpleExplanation ||
-          "আপনার বাক্যটি বোঝা যাচ্ছে।",
-      },
-      teacherExplanation: {
-        english:
-          backendResult.teacherExplanation ||
-          backendResult.simpleExplanation ||
-          "The backend checked your sentence.",
-        hindi:
-          backendResult.teacherExplanation ||
-          backendResult.simpleExplanation ||
-          "Backend ने आपका sentence check किया।",
-        bengali:
-          backendResult.teacherExplanation ||
-          backendResult.simpleExplanation ||
-          "Backend আপনার sentence check করেছে।",
-      },
-      pattern:
-        backendResult.repeatSentence ||
-        backendResult.correctedText ||
-        "Repeat the corrected sentence.",
-      repeatTask:
-        backendResult.smartSuggestion ||
-        backendResult.coachReply ||
-        "Repeat the corrected sentence slowly and clearly.",
-    };
+    try {
+      const backendResult = await analyzeSentenceWithBackend(cleanSentence);
+      const mappedResult = mapBackendResult(cleanSentence, backendResult);
 
-    setResult(mappedResult);
-    setRepeatState("idle");
-    setShowResultModal(true);
+      setResult(mappedResult);
+      setRepeatState("idle");
+      setShowResultModal(true);
 
-    await addActivity({
-      type: "grammar",
-      title: "Grammar correction",
-      detail: `Fixed: ${mappedResult.input} → ${mappedResult.corrected}`,
-      score: mappedResult.score,
-      mistake: mappedResult.mistakes.join(", "),
-      correctedSentence: mappedResult.corrected,
-    });
-  } catch (error) {
-    console.log("Grammar backend error:", error);
+      await saveGrammarActivity(mappedResult);
+    } catch (error) {
+      console.log("Grammar backend fallback:", error);
 
-    const fallback =
-      demoResults.find(
-        (item) => item.input.toLowerCase() === cleanSentence.toLowerCase()
-      ) || demoResults[0];
+      const fallbackResult = buildFallbackResult(cleanSentence);
 
-    setResult(fallback);
-    setRepeatState("idle");
-    setShowResultModal(true);
-  }
-};
+      setResult(fallbackResult);
+      setRepeatState("idle");
+      setShowResultModal(true);
+
+      await saveGrammarActivity(fallbackResult);
+    }
+  };
 
   const chooseDemo = (item: GrammarResult) => {
+    Speech.stop();
     setUserSentence(item.input);
     setResult(item);
     setRepeatState("idle");
@@ -376,16 +436,22 @@ export default function GrammarCoachScreen() {
     }
 
     if (repeatState === "recording") {
-      setRepeatState("done");
+      setRepeatState("saved");
 
-      await addActivity({
-        type: "grammar",
-        title: "Grammar repeat practice",
-        detail: `Repeated corrected sentence: ${result.corrected}`,
-        score: Math.min(result.score + 8, 100),
-        mistake: result.mistakes.join(", "),
-        correctedSentence: result.corrected,
-      });
+      try {
+        await addActivity({
+          type: "grammar",
+          title: "Grammar repeat practice",
+          detail: `Repeated corrected sentence: ${result.repeatSentence}`,
+          score: Math.min(result.score + 8, 100),
+          confidence: Math.min(result.confidenceScore + 6, 100),
+          fluency: Math.min(result.fluencyScore + 6, 100),
+          mistake: result.mistakes.join(", "),
+          correctedSentence: result.repeatSentence,
+        });
+      } catch (error) {
+        console.log("Failed to save Grammar repeat activity:", error);
+      }
 
       return;
     }
@@ -402,14 +468,30 @@ export default function GrammarCoachScreen() {
     setShowResultModal(true);
   };
 
+  const getRepeatButtonText = () => {
+    if (repeatState === "recording") return "Save Repeat";
+    if (repeatState === "saved") return "Practice Again";
+    return "Start Repeat";
+  };
+
+  const getRepeatButtonIcon = (): keyof typeof Ionicons.glyphMap => {
+    if (repeatState === "recording") return "checkmark-outline";
+    if (repeatState === "saved") return "refresh-outline";
+    return "mic-outline";
+  };
+
   return (
     <>
       <ScrollView
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        bounces={false}
+        alwaysBounceVertical={false}
+        overScrollMode="never"
+        decelerationRate="fast"
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -424,8 +506,6 @@ export default function GrammarCoachScreen() {
           <View style={styles.emptyBox} />
         </View>
 
-
-        {/* Write Your Sentence */}
         <View style={styles.inputCard}>
           <View style={styles.cardTopRow}>
             <View style={styles.cardIcon}>
@@ -443,7 +523,10 @@ export default function GrammarCoachScreen() {
           <TextInput
             style={styles.input}
             value={userSentence}
-            onChangeText={setUserSentence}
+            onChangeText={(text) => {
+              setUserSentence(text);
+              setRepeatState("idle");
+            }}
             placeholder="Example: I go market"
             placeholderTextColor="#94A3B8"
             multiline
@@ -459,7 +542,6 @@ export default function GrammarCoachScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Suggestions */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Common Mistake Suggestions</Text>
           <Text style={styles.sectionSubtitle}>
@@ -471,6 +553,10 @@ export default function GrammarCoachScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.demoRow}
+          bounces={false}
+          alwaysBounceHorizontal={false}
+          overScrollMode="never"
+          decelerationRate="fast"
         >
           {demoResults.map((item) => {
             const active = result.input === item.input;
@@ -499,7 +585,6 @@ export default function GrammarCoachScreen() {
           })}
         </ScrollView>
 
-        {/* Compact Repeat Practice */}
         <View style={styles.repeatCard}>
           <View style={styles.repeatTopRow}>
             <View style={styles.repeatIcon}>
@@ -523,7 +608,7 @@ export default function GrammarCoachScreen() {
           </View>
 
           <View style={styles.repeatSentenceBox}>
-            <Text style={styles.repeatSentence}>{result.corrected}</Text>
+            <Text style={styles.repeatSentence}>{result.repeatSentence}</Text>
           </View>
 
           <View
@@ -536,14 +621,18 @@ export default function GrammarCoachScreen() {
               style={[
                 styles.repeatMicCircle,
                 repeatState === "recording" && {
-                  backgroundColor: "#DC2626",
-                  borderColor: "#DC2626",
+                  backgroundColor: RECORDING_COLOR,
+                  borderColor: RECORDING_COLOR,
                   transform: [{ scale: pulseAnim }],
                 },
               ]}
             >
               <Ionicons
-                name={repeatState === "recording" ? "radio-button-on" : "mic-outline"}
+                name={
+                  repeatState === "recording"
+                    ? "radio-button-on"
+                    : "mic-outline"
+                }
                 size={24}
                 color={repeatState === "recording" ? "#FFFFFF" : ACTION_COLOR}
               />
@@ -552,8 +641,12 @@ export default function GrammarCoachScreen() {
             <View style={styles.repeatWaveBox}>
               <Animated.View style={[styles.repeatWaveBar, { height: barOne }]} />
               <Animated.View style={[styles.repeatWaveBar, { height: barTwo }]} />
-              <Animated.View style={[styles.repeatWaveBar, { height: barThree }]} />
-              <Animated.View style={[styles.repeatWaveBar, { height: barFour }]} />
+              <Animated.View
+                style={[styles.repeatWaveBar, { height: barThree }]}
+              />
+              <Animated.View
+                style={[styles.repeatWaveBar, { height: barFour }]}
+              />
             </View>
 
             <View style={styles.repeatStatusBox}>
@@ -575,7 +668,7 @@ export default function GrammarCoachScreen() {
             </View>
           </View>
 
-          {repeatState === "done" && (
+          {repeatState === "saved" && (
             <View style={styles.repeatSavedBox}>
               <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
               <Text style={styles.repeatSavedText}>
@@ -603,59 +696,19 @@ export default function GrammarCoachScreen() {
               activeOpacity={0.85}
             >
               <Ionicons
-                name={
-                  repeatState === "idle"
-                    ? "mic-outline"
-                    : repeatState === "recording"
-                    ? "stop"
-                    : "refresh-outline"
-                }
+                name={getRepeatButtonIcon()}
                 size={18}
                 color="#FFFFFF"
               />
 
               <Text style={styles.primaryButtonText}>
-                {repeatState === "idle"
-                  ? "Start Repeat"
-                  : repeatState === "recording"
-                  ? "Stop & Save"
-                  : "Try Again"}
+                {getRepeatButtonText()}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Compact Coming Soon */}
-        <View style={styles.futureCard}>
-          <View style={styles.futureHeaderRow}>
-            <View style={styles.futureIcon}>
-              <Ionicons name="sparkles-outline" size={21} color={ACTION_COLOR} />
-            </View>
-
-            <View style={styles.futureTitleBox}>
-              <Text style={styles.futureTitle}>Coming Soon</Text>
-              <Text style={styles.futureSubtitle}>
-                Real speaking grammar correction will connect after backend.
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.futureList}>
-            {futureItems.map((item) => (
-              <View key={item} style={styles.futureItemRow}>
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={17}
-                  color={ACTION_COLOR}
-                />
-                <Text style={styles.futureItemText}>{item}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
       </ScrollView>
 
-      {/* Analysis Result Popup */}
       <Modal
         visible={showResultModal}
         transparent
@@ -690,20 +743,46 @@ export default function GrammarCoachScreen() {
             <ScrollView
               style={styles.modalScroll}
               showsVerticalScrollIndicator={false}
+              bounces={false}
+              alwaysBounceVertical={false}
+              overScrollMode="never"
+              decelerationRate="fast"
             >
-              {/* Score */}
-              <View style={styles.modalScoreRow}>
-                <View>
-                  <Text style={styles.modalScoreLabel}>Grammar score</Text>
-                  <Text style={styles.modalScoreSubLabel}>
-                    Based on current rule-based MVP check
-                  </Text>
+              <View style={styles.scoreGrid}>
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>{result.fluencyScore}%</Text>
+                  <Text style={styles.scoreLabel}>Fluency</Text>
                 </View>
 
-                <Text style={styles.modalScoreValue}>{result.score}%</Text>
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>
+                    {result.confidenceScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Confidence</Text>
+                </View>
+
+                <View style={styles.scoreMiniBox}>
+                  <Text style={styles.scoreValue}>
+                    {result.speakingScore}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Speaking</Text>
+                </View>
               </View>
 
-              {/* Before / After */}
+              {!result.usedBackend && (
+                <View style={styles.fallbackNotice}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={18}
+                    color="#92400E"
+                  />
+                  <Text style={styles.fallbackNoticeText}>
+                    Local fallback result used. Backend connection can be tested
+                    again after this screen is stable.
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.modalBeforeBox}>
                 <Text style={styles.modalBoxLabel}>Before</Text>
                 <Text style={styles.modalWrongText}>{result.input}</Text>
@@ -727,7 +806,6 @@ export default function GrammarCoachScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Mistakes */}
               <View style={styles.modalMistakeBox}>
                 <View style={styles.modalTitleRow}>
                   <Ionicons
@@ -747,7 +825,6 @@ export default function GrammarCoachScreen() {
                 </View>
               </View>
 
-              {/* Explanation */}
               <View style={styles.modalExplanationBox}>
                 <View style={styles.modalExplanationHeader}>
                   <View style={styles.modalTitleRow}>
@@ -777,7 +854,6 @@ export default function GrammarCoachScreen() {
                 </Text>
               </View>
 
-              {/* Mode Switch */}
               <View style={styles.modalModeBox}>
                 <TouchableOpacity
                   style={[
@@ -835,13 +911,11 @@ export default function GrammarCoachScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Pattern */}
               <View style={styles.modalPatternBox}>
                 <Text style={styles.modalPatternLabel}>Speaking pattern</Text>
                 <Text style={styles.modalPatternText}>{result.pattern}</Text>
               </View>
 
-              {/* Repeat Task */}
               <View style={styles.modalRepeatBox}>
                 <View style={styles.modalTitleRow}>
                   <Ionicons name="repeat-outline" size={20} color={ACTION_COLOR} />
@@ -923,8 +997,6 @@ const styles = StyleSheet.create({
     height: 42,
   },
 
- 
-
   inputCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
@@ -967,24 +1039,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  sectionHeader: {
-    marginBottom: 12,
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#0F172A",
-  },
-
-  sectionSubtitle: {
-    marginTop: 4,
-    fontSize: 12,
-    lineHeight: 18,
-    color: "#64748B",
-    fontWeight: "600",
-  },
-
   input: {
     marginTop: 14,
     minHeight: 88,
@@ -1014,6 +1068,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
     marginLeft: 7,
+  },
+
+  sectionHeader: {
+    marginBottom: 12,
+  },
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+
+  sectionSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+    fontWeight: "600",
   },
 
   demoRow: {
@@ -1066,7 +1138,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    marginBottom: 18,
+    marginBottom: 24,
   },
 
   repeatTopRow: {
@@ -1174,7 +1246,7 @@ const styles = StyleSheet.create({
   repeatWaveBar: {
     width: 7,
     borderRadius: 999,
-    backgroundColor: "#DC2626",
+    backgroundColor: RECORDING_COLOR,
   },
 
   repeatStatusBox: {
@@ -1249,7 +1321,7 @@ const styles = StyleSheet.create({
   },
 
   primaryButtonRecording: {
-    backgroundColor: "#DC2626",
+    backgroundColor: RECORDING_COLOR,
   },
 
   primaryButtonText: {
@@ -1257,67 +1329,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     marginLeft: 7,
-  },
-
-  futureCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 24,
-  },
-
-  futureHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-
-  futureIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 11,
-  },
-
-  futureTitleBox: {
-    flex: 1,
-  },
-
-  futureTitle: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: "#0F172A",
-    marginBottom: 3,
-  },
-
-  futureSubtitle: {
-    fontSize: 12,
-    color: "#64748B",
-    lineHeight: 18,
-    fontWeight: "600",
-  },
-
-  futureList: {
-    gap: 8,
-  },
-
-  futureItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  futureItemText: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 12,
-    lineHeight: 18,
-    color: "#334155",
-    fontWeight: "700",
   },
 
   modalOverlay: {
@@ -1382,32 +1393,51 @@ const styles = StyleSheet.create({
     maxHeight: 470,
   },
 
-  modalScoreRow: {
-    backgroundColor: "#EEF2FF",
-    borderRadius: 16,
-    padding: 13,
+  scoreGrid: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 10,
     marginBottom: 12,
   },
 
-  modalScoreLabel: {
-    fontSize: 13,
+  scoreMiniBox: {
+    flex: 1,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 16,
+    padding: 12,
+    alignItems: "center",
+  },
+
+  scoreValue: {
+    fontSize: 16,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+
+  scoreLabel: {
+    fontSize: 11,
     color: "#334155",
     fontWeight: "900",
   },
 
-  modalScoreSubLabel: {
-    marginTop: 3,
-    fontSize: 11,
-    color: "#64748B",
-    fontWeight: "600",
+  fallbackNotice: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
   },
 
-  modalScoreValue: {
-    fontSize: 18,
-    color: ACTION_COLOR,
-    fontWeight: "900",
+  fallbackNoticeText: {
+    flex: 1,
+    marginLeft: 7,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400E",
+    fontWeight: "800",
   },
 
   modalBeforeBox: {
