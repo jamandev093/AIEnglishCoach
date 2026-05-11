@@ -114,14 +114,15 @@ export async function analyzeSentenceWithBackend(
   return normalizeAnalyzeResponse(data, cleanText);
 }
 
-
 export async function analyzeSpeechWithBackend(
-  audioUri: string
+  audioUri: string,
+  simulatedText: string = "I go market"
 ): Promise<AnalyzeApiResponse> {
   if (!audioUri.trim()) {
     throw new Error("Audio URI is required for speech analysis");
   }
 
+  const cleanSimulatedText = simulatedText.trim() || "I go market";
   const fileName = audioUri.split("/").pop() || "speech.m4a";
 
   const formData = new FormData();
@@ -131,6 +132,8 @@ export async function analyzeSpeechWithBackend(
     name: fileName,
     type: "audio/m4a",
   } as any);
+
+  formData.append("simulatedText", cleanSimulatedText);
 
   const response = await fetch(`${API_BASE_URL}/speech/analyze`, {
     method: "POST",
@@ -143,5 +146,5 @@ export async function analyzeSpeechWithBackend(
 
   const data = (await response.json()) as RawAnalyzeApiResponse;
 
-  return normalizeAnalyzeResponse(data, "I go market");
+  return normalizeAnalyzeResponse(data, cleanSimulatedText);
 }

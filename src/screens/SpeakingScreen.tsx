@@ -371,7 +371,10 @@ export default function SpeakingScreen() {
 
   const analyzeSpeakingWithBackend = async (audioUri: string) => {
     try {
-      const apiResult = await analyzeSpeechWithBackend(audioUri);
+      const apiResult = await analyzeSpeechWithBackend(
+      audioUri,
+      selectedSentence.simulatedMistake
+      );
       const mappedResult = mapBackendResult(selectedSentence, apiResult);
 
       if (!isMountedRef.current) return mappedResult;
