@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import * as Speech from "expo-speech";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -12,14 +13,13 @@ import {
   View,
 } from "react-native";
 
-import { Audio } from "expo-av";
-
 import {
   analyzeSpeechWithBackend,
   type AnalyzeApiResponse,
 } from "../config/api";
 import { addActivity } from "../utils/activityHistory";
-type SpeakingMode = "idle" | "recording" | "responding" |"analyzed";
+
+type SpeakingMode = "idle" | "recording" | "responding" | "analyzed";
 type RepeatMode = "idle" | "recording" | "saved";
 
 type SpeakingResult = {
@@ -161,9 +161,11 @@ export default function SpeakingScreen() {
     buildFallbackResult(suggestedSentences[0])
   );
   const [showResultPopup, setShowResultPopup] = useState(false);
-    const recordingRef = useRef<Audio.Recording | null>(null);
-    const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-   const isStoppingRef = useRef(false);
+
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isStoppingRef = useRef(false);
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(14)).current;
   const barTwo = useRef(new Animated.Value(30)).current;
@@ -281,6 +283,13 @@ export default function SpeakingScreen() {
     barFive,
   ]);
 
+  const clearAutoStopTimer = () => {
+    if (autoStopTimerRef.current) {
+      clearTimeout(autoStopTimerRef.current);
+      autoStopTimerRef.current = null;
+    }
+  };
+
   const speakText = (text: string) => {
     if (!text.trim()) return;
 
@@ -325,8 +334,7 @@ export default function SpeakingScreen() {
     }
   };
 
-  
-    const analyzeSpeakingWithBackend = async (audioUri: string) => {
+  const analyzeSpeakingWithBackend = async (audioUri: string) => {
     try {
       const apiResult = await analyzeSpeechWithBackend(audioUri);
       const mappedResult = mapBackendResult(selectedSentence, apiResult);
@@ -344,18 +352,65 @@ export default function SpeakingScreen() {
       return fallbackResult;
     }
   };
-      
 
-    const clearAutoStopTimer = () => {
-  if (autoStopTimerRef.current) {
-    clearTimeout(autoStopTimerRef.current);
-    autoStopTimerRef.current = null;
-  }
-};
+  const stopAudioRecordingAndAnalyze = async () => {
+    if (isStoppingRef.current) {
+      return;
+    }
 
-    const startAudioRecording = async () => {
+    isStoppingRef.current = true;
+    clearAutoStopTimer();
+
+    try {
+      const recording = recordingRef.current;
+
+      if (!recording) {
+        throw new Error("No active recording found");
+      }
+
+      await recording.stopAndUnloadAsync();
+
+      const audioUri = recording.getURI();
+
+      recordingRef.current = null;
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      if (!audioUri) {
+        throw new Error("Recording URI not found");
+      }
+
+      setMode("responding");
+
+      await analyzeSpeakingWithBackend(audioUri);
+
+      setMode("analyzed");
+      setShowResultPopup(true);
+      isStoppingRef.current = false;
+    } catch (error) {
+      console.log("Failed to stop/analyze audio:", error);
+
+      recordingRef.current = null;
+      setMode("responding");
+
+      const fallbackResult = buildFallbackResult(selectedSentence);
+      setResult(fallbackResult);
+      await saveSpeakingActivity(fallbackResult);
+
+      setMode("analyzed");
+      setShowResultPopup(true);
+      isStoppingRef.current = false;
+    }
+  };
+
+  const startAudioRecording = async () => {
     try {
       Speech.stop();
+      clearAutoStopTimer();
+      isStoppingRef.current = false;
 
       const permission = await Audio.requestPermissionsAsync();
 
@@ -385,14 +440,14 @@ export default function SpeakingScreen() {
 
       recordingRef.current = recording;
       setMode("recording");
-      clearAutoStopTimer();
 
       autoStopTimerRef.current = setTimeout(() => {
-      stopAudioRecordingAndAnalyze();
-     }, AUTO_STOP_MS);
+        stopAudioRecordingAndAnalyze();
+      }, AUTO_STOP_MS);
     } catch (error) {
       console.log("Failed to start audio recording:", error);
 
+      clearAutoStopTimer();
       recordingRef.current = null;
       setMode("idle");
 
@@ -403,64 +458,10 @@ export default function SpeakingScreen() {
     }
   };
 
-  const stopAudioRecordingAndAnalyze = async () => {
-
-     if (isStoppingRef.current) {
-    return;
-    }
-
-    isStoppingRef.current = true;
-    clearAutoStopTimer();
-
-    try {
-      const recording = recordingRef.current;
-
-      if (!recording) {
-        throw new Error("No active recording found");
-      }
-
-      await recording.stopAndUnloadAsync();
-
-      const audioUri = recording.getURI();
-
-      recordingRef.current = null;
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      });
-
-      if (!audioUri) {
-        throw new Error("Recording URI not found");
-      }
-         setMode("responding");
-
-     await analyzeSpeakingWithBackend(audioUri);
-
-     setMode("analyzed");
-     setShowResultPopup(true);
-     isStoppingRef.current = false;
-    } catch (error) {
-      console.log("Failed to stop/analyze audio:", error);
-
-      recordingRef.current = null;
-
-     setMode("responding");
-
-      const fallbackResult = buildFallbackResult(selectedSentence);
-      setResult(fallbackResult);
-      await saveSpeakingActivity(fallbackResult);
-
-      setMode("analyzed");
-      setShowResultPopup(true);
-      isStoppingRef.current = false;
-    }
-  };
-
-    const chooseSentence = async (item: SuggestedSentence) => {
+  const chooseSentence = async (item: SuggestedSentence) => {
     Speech.stop();
-     clearAutoStopTimer();
-     isStoppingRef.current = false;
+    clearAutoStopTimer();
+    isStoppingRef.current = false;
 
     if (recordingRef.current) {
       try {
@@ -480,6 +481,10 @@ export default function SpeakingScreen() {
   };
 
   const handleMainButton = async () => {
+    if (mode === "responding") {
+      return;
+    }
+
     if (repeatMode === "recording") {
       setRepeatMode("saved");
       await saveRepeatActivity();
@@ -491,9 +496,8 @@ export default function SpeakingScreen() {
       setMode("idle");
       return;
     }
-    
 
-        if (mode === "idle") {
+    if (mode === "idle") {
       await startAudioRecording();
       return;
     }
@@ -505,7 +509,7 @@ export default function SpeakingScreen() {
 
     if (mode === "analyzed") {
       setRepeatMode("idle");
-      setMode("recording");
+      await startAudioRecording();
     }
   };
 
@@ -515,7 +519,7 @@ export default function SpeakingScreen() {
     setRepeatMode("recording");
   };
 
-     const handleTryAgainFromPopup = async () => {
+  const handleTryAgainFromPopup = async () => {
     setShowResultPopup(false);
     setRepeatMode("idle");
     await startAudioRecording();
@@ -649,6 +653,7 @@ export default function SpeakingScreen() {
             style={[
               styles.recordingBox,
               isListening && styles.recordingBoxActive,
+              mode === "responding" && styles.respondingBox,
             ]}
           >
             <Animated.View
@@ -659,12 +664,23 @@ export default function SpeakingScreen() {
                   borderColor: RECORDING_COLOR,
                   transform: [{ scale: pulseAnim }],
                 },
+                mode === "responding" && styles.respondingMicCircle,
               ]}
             >
               <Ionicons
-                name={isListening ? "radio-button-on" : "mic-outline"}
+                name={
+                  mode === "responding"
+                    ? "hourglass-outline"
+                    : isListening
+                    ? "radio-button-on"
+                    : "mic-outline"
+                }
                 size={34}
-                color={isListening ? "#FFFFFF" : ACTION_COLOR}
+                color={
+                  isListening || mode === "responding"
+                    ? "#FFFFFF"
+                    : ACTION_COLOR
+                }
               />
             </Animated.View>
 
@@ -676,33 +692,34 @@ export default function SpeakingScreen() {
               <Animated.View style={[styles.waveBar, { height: barFive }]} />
             </View>
 
-             <Text style={styles.recordingTitle}>
-     {repeatMode === "recording"
-      ? "Repeating..."
-      : repeatMode === "saved"
-      ? "Repeat saved"
-      : mode === "idle"
-      ? "Ready to speak"
-       : mode === "recording"
-       ? "Listening..."
-       : mode === "responding"
-       ? "Responding..."
-        : "Result ready"}
-         </Text>
+            <Text style={styles.recordingTitle}>
+              {repeatMode === "recording"
+                ? "Repeating..."
+                : repeatMode === "saved"
+                ? "Repeat saved"
+                : mode === "idle"
+                ? "Ready to speak"
+                : mode === "recording"
+                ? "Listening..."
+                : mode === "responding"
+                ? "Responding..."
+                : "Result ready"}
+            </Text>
 
-                <Text style={styles.recordingText}>
-  {repeatMode === "recording"
-    ? "Say the corrected sentence again."
-    : repeatMode === "saved"
-    ? "Your repeat practice was saved to Progress."
-    : mode === "idle"
-    ? "Tap Start Speaking and say the sentence aloud."
-    : mode === "recording"
-    ? "Speak now. The app will auto-check after a few seconds."
-    : mode === "responding"
-    ? "AI is checking your speaking. Please wait..."
-    : "Your result is inside the popup."}
-</Text>
+            <Text style={styles.recordingText}>
+              {repeatMode === "recording"
+                ? "Say the corrected sentence again."
+                : repeatMode === "saved"
+                ? "Your repeat practice was saved to Progress."
+                : mode === "idle"
+                ? "Tap Start Speaking and say the sentence aloud."
+                : mode === "recording"
+                ? "Speak now. The app will auto-check after a few seconds."
+                : mode === "responding"
+                ? "AI is checking your speaking. Please wait..."
+                : "Your result is inside the popup."}
+            </Text>
+          </View>
 
           {repeatMode === "saved" && (
             <View style={styles.savedBox}>
@@ -713,15 +730,16 @@ export default function SpeakingScreen() {
             </View>
           )}
 
-          <TouchableOpacity
-             style={[
-              styles.dynamicActionButton,
-              isListening && styles.dynamicActionButtonRecording,
-             mode === "responding" && styles.dynamicActionButtonDisabled,
-             ]}
-             onPress={handleMainButton}
-             activeOpacity={0.85}
-             disabled={mode === "responding"}
+          <View style={styles.lowerActionRow}>
+            <TouchableOpacity
+              style={[
+                styles.dynamicActionButton,
+                isListening && styles.dynamicActionButtonRecording,
+                mode === "responding" && styles.dynamicActionButtonDisabled,
+              ]}
+              onPress={handleMainButton}
+              activeOpacity={0.85}
+              disabled={mode === "responding"}
             >
               <Ionicons name={getMainButtonIcon()} size={18} color="#FFFFFF" />
               <Text style={styles.dynamicActionText}>
@@ -733,6 +751,7 @@ export default function SpeakingScreen() {
               style={styles.liveButton}
               onPress={handleLivePress}
               activeOpacity={0.85}
+              disabled={mode === "responding"}
             >
               <Ionicons name="radio-outline" size={18} color="#FFFFFF" />
               <Text style={styles.liveButtonText}>Live</Text>
@@ -883,7 +902,11 @@ export default function SpeakingScreen() {
 
               <View style={styles.memoryBox}>
                 <View style={styles.modalInfoTopRow}>
-                  <MaterialCommunityIcons name="brain" size={22} color={ACTION_COLOR} />
+                  <MaterialCommunityIcons
+                    name="brain"
+                    size={22}
+                    color={ACTION_COLOR}
+                  />
                   <Text style={styles.modalInfoTitle}>Mistake Memory</Text>
                 </View>
 
@@ -1140,6 +1163,11 @@ const styles = StyleSheet.create({
     borderColor: "#FECACA",
   },
 
+  respondingBox: {
+    backgroundColor: "#F8FAFC",
+    borderColor: "#CBD5E1",
+  },
+
   micCircle: {
     width: 72,
     height: 72,
@@ -1150,6 +1178,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
+  },
+
+  respondingMicCircle: {
+    backgroundColor: "#94A3B8",
+    borderColor: "#94A3B8",
   },
 
   waveBox: {
@@ -1211,6 +1244,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     marginTop: 12,
+    alignItems: "center",
   },
 
   liveButton: {
@@ -1243,10 +1277,10 @@ const styles = StyleSheet.create({
   dynamicActionButtonRecording: {
     backgroundColor: RECORDING_COLOR,
   },
-  
-   dynamicActionButtonDisabled: {
-  backgroundColor: "#94A3B8",
-   },
+
+  dynamicActionButtonDisabled: {
+    backgroundColor: "#94A3B8",
+  },
 
   dynamicActionText: {
     marginLeft: 7,
