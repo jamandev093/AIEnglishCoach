@@ -47,7 +47,9 @@ type SuggestedSentence = {
 const ACTION_COLOR = "#8499DC";
 const RECORDING_COLOR = "#DC2626";
 const DISABLED_COLOR = "#94A3B8";
-const AUTO_STOP_MS = 5000;
+const MIN_AUTO_STOP_MS = 4000;
+const MEDIUM_AUTO_STOP_MS = 5500;
+const LONG_AUTO_STOP_MS = 7000;
 
 const suggestedSentences: SuggestedSentence[] = [
   {
@@ -71,6 +73,20 @@ const suggestedSentences: SuggestedSentence[] = [
     simulatedMistake: "Can you repeat slow",
   },
 ];
+
+function getAutoStopDuration(sentence: string): number {
+  const wordCount = sentence.trim().split(/\s+/).filter(Boolean).length;
+
+  if (wordCount <= 5) {
+    return MIN_AUTO_STOP_MS;
+  }
+
+  if (wordCount <= 8) {
+    return MEDIUM_AUTO_STOP_MS;
+  }
+
+  return LONG_AUTO_STOP_MS;
+}
 
 function buildFallbackResult(sentence: SuggestedSentence): SpeakingResult {
   return {
@@ -501,9 +517,12 @@ export default function SpeakingScreen() {
         setMode("recording");
       }
 
-      autoStopTimerRef.current = setTimeout(() => {
-        void stopAudioRecordingAndAnalyze();
-      }, AUTO_STOP_MS);
+      const autoStopDuration = getAutoStopDuration(selectedSentence.text);
+
+     autoStopTimerRef.current = setTimeout(() => {
+      void stopAudioRecordingAndAnalyze();
+      }, autoStopDuration);
+
     } catch (error) {
       console.log("Failed to start audio recording:", error);
 
@@ -773,7 +792,7 @@ export default function SpeakingScreen() {
                 : mode === "idle"
                 ? "Tap Start Speaking and say the sentence aloud."
                 : mode === "recording"
-                ? "Speak now. The app will auto-check after a few seconds."
+                ? "Speak naturally. The app will auto-check when the sentence time is complete."
                 : mode === "responding"
                 ? "AI is checking your speaking. Please wait..."
                 : "Your result is inside the popup."}
