@@ -46,6 +46,7 @@ type SuggestedSentence = {
 
 const ACTION_COLOR = "#8499DC";
 const RECORDING_COLOR = "#DC2626";
+const AUTO_STOP_MS = 5000;
 
 const suggestedSentences: SuggestedSentence[] = [
   {
@@ -161,6 +162,8 @@ export default function SpeakingScreen() {
   );
   const [showResultPopup, setShowResultPopup] = useState(false);
     const recordingRef = useRef<Audio.Recording | null>(null);
+    const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const isStoppingRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(14)).current;
   const barTwo = useRef(new Animated.Value(30)).current;
@@ -341,7 +344,15 @@ export default function SpeakingScreen() {
       return fallbackResult;
     }
   };
-  
+      
+
+    const clearAutoStopTimer = () => {
+  if (autoStopTimerRef.current) {
+    clearTimeout(autoStopTimerRef.current);
+    autoStopTimerRef.current = null;
+  }
+};
+
     const startAudioRecording = async () => {
     try {
       Speech.stop();
@@ -374,6 +385,11 @@ export default function SpeakingScreen() {
 
       recordingRef.current = recording;
       setMode("recording");
+      clearAutoStopTimer();
+
+      autoStopTimerRef.current = setTimeout(() => {
+      stopAudioRecordingAndAnalyze();
+     }, AUTO_STOP_MS);
     } catch (error) {
       console.log("Failed to start audio recording:", error);
 
@@ -388,6 +404,14 @@ export default function SpeakingScreen() {
   };
 
   const stopAudioRecordingAndAnalyze = async () => {
+
+     if (isStoppingRef.current) {
+    return;
+    }
+
+    isStoppingRef.current = true;
+    clearAutoStopTimer();
+
     try {
       const recording = recordingRef.current;
 
@@ -414,6 +438,7 @@ export default function SpeakingScreen() {
 
       setMode("analyzed");
       setShowResultPopup(true);
+      isStoppingRef.current = false;
     } catch (error) {
       console.log("Failed to stop/analyze audio:", error);
 
@@ -425,11 +450,14 @@ export default function SpeakingScreen() {
 
       setMode("analyzed");
       setShowResultPopup(true);
+      isStoppingRef.current = false;
     }
   };
 
     const chooseSentence = async (item: SuggestedSentence) => {
     Speech.stop();
+     clearAutoStopTimer();
+     isStoppingRef.current = false;
 
     if (recordingRef.current) {
       try {
@@ -663,7 +691,7 @@ export default function SpeakingScreen() {
                 : mode === "idle"
                 ? "Tap Start Speaking and say the sentence aloud."
                 : mode === "recording"
-                ? "Speak slowly. Mistakes are okay."
+                 ? "Speak now. The app will auto-check after a few seconds."
                 : "Your result is inside the popup."}
             </Text>
           </View>
