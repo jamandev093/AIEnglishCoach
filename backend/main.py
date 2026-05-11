@@ -1,15 +1,14 @@
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
-
-from analyzer import analyze_sentence
-from speech_service import transcribe_audio_file
+from coach_service import analyze_speech_file, analyze_text as analyze_text_service
+from schemas import AnalyzeRequest
+from settings import APP_NAME, APP_VERSION
 
 
 app = FastAPI(
-    title="AI English Coach Backend",
-    version="1.0.0",
+    title=APP_NAME,
+    version=APP_VERSION,
     description="Backend API for AI English Coach MVP",
 )
 
@@ -21,17 +20,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-class AnalyzeRequest(BaseModel):
-    text: str
-
-
 @app.get("/")
 def root():
     return {
         "success": True,
         "message": "AI English Coach backend is running 🚀",
-        "version": "1.0.0",
+        "version": APP_VERSION,
     }
 
 
@@ -40,7 +34,7 @@ def health_check():
     return {
         "success": True,
         "status": "healthy",
-        "service": "AI English Coach Backend",
+        "service": APP_NAME,
     }
 
 
@@ -52,7 +46,7 @@ def analyze_text(request: AnalyzeRequest):
         raise HTTPException(status_code=400, detail="Text is required")
 
     try:
-        return analyze_sentence(text)
+        return analyze_text_service(text)
     except Exception as error:
         print("Analyze error:", error)
         raise HTTPException(status_code=500, detail="Analyze failed")
@@ -64,17 +58,10 @@ async def analyze_speech(
     simulatedText: str = Form(""),
 ):
     try:
-        transcribed_text = await transcribe_audio_file(
+        return await analyze_speech_file(
             file=file,
             simulated_text=simulatedText,
         )
-
-        result = analyze_sentence(transcribed_text)
-
-        result["audioFileName"] = file.filename
-        result["transcribedText"] = transcribed_text
-
-        return result
     except Exception as error:
         print("Speech analyze error:", error)
         raise HTTPException(status_code=500, detail="Speech analyze failed")
