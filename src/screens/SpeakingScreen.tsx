@@ -19,7 +19,7 @@ import {
   type AnalyzeApiResponse,
 } from "../config/api";
 import { addActivity } from "../utils/activityHistory";
-type SpeakingMode = "idle" | "recording" | "analyzed";
+type SpeakingMode = "idle" | "recording" | "responding" |"analyzed";
 type RepeatMode = "idle" | "recording" | "saved";
 
 type SpeakingResult = {
@@ -433,16 +433,19 @@ export default function SpeakingScreen() {
       if (!audioUri) {
         throw new Error("Recording URI not found");
       }
+         setMode("responding");
 
-      await analyzeSpeakingWithBackend(audioUri);
+     await analyzeSpeakingWithBackend(audioUri);
 
-      setMode("analyzed");
-      setShowResultPopup(true);
-      isStoppingRef.current = false;
+     setMode("analyzed");
+     setShowResultPopup(true);
+     isStoppingRef.current = false;
     } catch (error) {
       console.log("Failed to stop/analyze audio:", error);
 
       recordingRef.current = null;
+
+     setMode("responding");
 
       const fallbackResult = buildFallbackResult(selectedSentence);
       setResult(fallbackResult);
@@ -529,6 +532,7 @@ export default function SpeakingScreen() {
     if (repeatMode === "recording") return "Save Repeat";
     if (repeatMode === "saved") return "Practice Again";
     if (mode === "recording") return "Stop & Check";
+    if (mode === "responding") return "Checking...";
     if (mode === "analyzed") return "Practice Again";
     return "Start Speaking";
   };
@@ -537,6 +541,7 @@ export default function SpeakingScreen() {
     if (repeatMode === "recording") return "checkmark-outline";
     if (repeatMode === "saved") return "refresh-outline";
     if (mode === "recording") return "stop";
+    if (mode === "responding") return "hourglass-outline";
     if (mode === "analyzed") return "refresh-outline";
     return "mic-outline";
   };
@@ -671,30 +676,33 @@ export default function SpeakingScreen() {
               <Animated.View style={[styles.waveBar, { height: barFive }]} />
             </View>
 
-            <Text style={styles.recordingTitle}>
-              {repeatMode === "recording"
-                ? "Repeating..."
-                : repeatMode === "saved"
-                ? "Repeat saved"
-                : mode === "idle"
-                ? "Ready to speak"
-                : mode === "recording"
-                ? "Listening..."
-                : "Result ready"}
-            </Text>
+             <Text style={styles.recordingTitle}>
+     {repeatMode === "recording"
+      ? "Repeating..."
+      : repeatMode === "saved"
+      ? "Repeat saved"
+      : mode === "idle"
+      ? "Ready to speak"
+       : mode === "recording"
+       ? "Listening..."
+       : mode === "responding"
+       ? "Responding..."
+        : "Result ready"}
+         </Text>
 
-            <Text style={styles.recordingText}>
-              {repeatMode === "recording"
-                ? "Say the corrected sentence again."
-                : repeatMode === "saved"
-                ? "Your repeat practice was saved to Progress."
-                : mode === "idle"
-                ? "Tap Start Speaking and say the sentence aloud."
-                : mode === "recording"
-                 ? "Speak now. The app will auto-check after a few seconds."
-                : "Your result is inside the popup."}
-            </Text>
-          </View>
+                <Text style={styles.recordingText}>
+  {repeatMode === "recording"
+    ? "Say the corrected sentence again."
+    : repeatMode === "saved"
+    ? "Your repeat practice was saved to Progress."
+    : mode === "idle"
+    ? "Tap Start Speaking and say the sentence aloud."
+    : mode === "recording"
+    ? "Speak now. The app will auto-check after a few seconds."
+    : mode === "responding"
+    ? "AI is checking your speaking. Please wait..."
+    : "Your result is inside the popup."}
+</Text>
 
           {repeatMode === "saved" && (
             <View style={styles.savedBox}>
@@ -705,14 +713,15 @@ export default function SpeakingScreen() {
             </View>
           )}
 
-          <View style={styles.lowerActionRow}>
-            <TouchableOpacity
-              style={[
-                styles.dynamicActionButton,
-                isListening && styles.dynamicActionButtonRecording,
-              ]}
-              onPress={handleMainButton}
-              activeOpacity={0.85}
+          <TouchableOpacity
+             style={[
+              styles.dynamicActionButton,
+              isListening && styles.dynamicActionButtonRecording,
+             mode === "responding" && styles.dynamicActionButtonDisabled,
+             ]}
+             onPress={handleMainButton}
+             activeOpacity={0.85}
+             disabled={mode === "responding"}
             >
               <Ionicons name={getMainButtonIcon()} size={18} color="#FFFFFF" />
               <Text style={styles.dynamicActionText}>
@@ -1234,6 +1243,10 @@ const styles = StyleSheet.create({
   dynamicActionButtonRecording: {
     backgroundColor: RECORDING_COLOR,
   },
+  
+   dynamicActionButtonDisabled: {
+  backgroundColor: "#94A3B8",
+   },
 
   dynamicActionText: {
     marginLeft: 7,
