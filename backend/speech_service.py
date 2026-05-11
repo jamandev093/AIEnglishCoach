@@ -1,5 +1,7 @@
 from fastapi import UploadFile
 
+from settings import STT_MODE
+
 
 async def transcribe_audio_file(
     file: UploadFile,
@@ -23,6 +25,23 @@ async def transcribe_audio_file(
 
     if clean_simulated_text:
         return clean_simulated_text
+
+    if STT_MODE == "fake":
+        return fake_transcribe_audio(file.filename)
+
+    if STT_MODE == "real":
+        return await transcribe_with_real_stt_placeholder(file)
+
+    return fake_transcribe_audio(file.filename)
+
+
+async def transcribe_with_real_stt_placeholder(file: UploadFile) -> str:
+    """
+    Placeholder for future real STT integration.
+
+    Real Whisper/OpenAI/open-source STT is intentionally not implemented in
+    Phase 2. Until it exists, this safely falls back to the fake transcription.
+    """
 
     return fake_transcribe_audio(file.filename)
 
