@@ -2,7 +2,9 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from analyzer import analyze_sentence, fake_transcribe_audio
+
+from analyzer import analyze_sentence
+from speech_service import transcribe_audio_file
 
 
 app = FastAPI(
@@ -59,10 +61,14 @@ def analyze_text(request: AnalyzeRequest):
 @app.post("/speech/analyze")
 async def analyze_speech(
     file: UploadFile = File(...),
-    simulatedText: str = Form("I go market"),
+    simulatedText: str = Form(""),
 ):
     try:
-        transcribed_text = simulatedText.strip() or fake_transcribe_audio(file.filename)
+        transcribed_text = await transcribe_audio_file(
+            file=file,
+            simulated_text=simulatedText,
+        )
+
         result = analyze_sentence(transcribed_text)
 
         result["audioFileName"] = file.filename
