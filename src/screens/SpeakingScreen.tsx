@@ -87,6 +87,20 @@ function getAutoStopDuration(sentence: string): number {
 
   return LONG_AUTO_STOP_MS;
 }
+  
+function getAutoStopLabel(sentence: string): string {
+  const wordCount = sentence.trim().split(/\s+/).filter(Boolean).length;
+
+  if (wordCount <= 5) {
+    return "Short practice";
+  }
+
+  if (wordCount <= 8) {
+    return "Medium practice";
+  }
+
+  return "Long practice";
+}
 
 function buildFallbackResult(sentence: SuggestedSentence): SpeakingResult {
   return {
@@ -192,6 +206,7 @@ export default function SpeakingScreen() {
   const barFive = useRef(new Animated.Value(22)).current;
 
   const isListening = mode === "recording" || repeatMode === "recording";
+  const autoStopLabel = getAutoStopLabel(selectedSentence.text);
 
   const clearAutoStopTimer = () => {
     if (autoStopTimerRef.current) {
@@ -778,7 +793,7 @@ export default function SpeakingScreen() {
                 : mode === "idle"
                 ? "Ready to speak"
                 : mode === "recording"
-                ? "Listening..."
+                ? `Listening... ${autoStopLabel}`
                 : mode === "responding"
                 ? "Responding..."
                 : "Result ready"}
@@ -792,7 +807,7 @@ export default function SpeakingScreen() {
                 : mode === "idle"
                 ? "Tap Start Speaking and say the sentence aloud."
                 : mode === "recording"
-                ? "Speak naturally. The app will auto-check when the sentence time is complete."
+                ? `${autoStopLabel} is active. Speak naturally; the app will auto-check automatically.`
                 : mode === "responding"
                 ? "AI is checking your speaking. Please wait..."
                 : "Your result is inside the popup."}
