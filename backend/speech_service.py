@@ -1,9 +1,11 @@
 from fastapi import UploadFile
 
+from provider_registry import (
+    DEFAULT_STT_MODE,
+    is_supported_real_stt_provider,
+    resolve_stt_mode,
+)
 from settings import STT_MODE, STT_PROVIDER
-
-
-SUPPORTED_REAL_STT_PROVIDERS = {"openai", "local", "azure", "google"}
 
 
 async def transcribe_audio_file(
@@ -29,13 +31,12 @@ async def transcribe_audio_file(
     if clean_simulated_text:
         return clean_simulated_text
 
-    stt_mode = (STT_MODE or "fake").strip().lower()
-    stt_provider = (STT_PROVIDER or "fake").strip().lower()
+    stt_mode = resolve_stt_mode(STT_MODE)
 
-    if stt_mode == "fake":
+    if stt_mode == DEFAULT_STT_MODE:
         return fake_transcribe_audio(file.filename)
 
-    if stt_mode == "real" and stt_provider in SUPPORTED_REAL_STT_PROVIDERS:
+    if stt_mode == "real" and is_supported_real_stt_provider(STT_PROVIDER):
         return await transcribe_with_real_stt_placeholder(file)
 
     return fake_transcribe_audio(file.filename)
