@@ -46,6 +46,7 @@ type SuggestedSentence = {
 
 const ACTION_COLOR = "#8499DC";
 const RECORDING_COLOR = "#DC2626";
+const DISABLED_COLOR = "#94A3B8";
 const AUTO_STOP_MS = 5000;
 
 const suggestedSentences: SuggestedSentence[] = [
@@ -165,6 +166,7 @@ export default function SpeakingScreen() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isStoppingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const barOne = useRef(new Animated.Value(14)).current;
@@ -174,6 +176,46 @@ export default function SpeakingScreen() {
   const barFive = useRef(new Animated.Value(22)).current;
 
   const isListening = mode === "recording" || repeatMode === "recording";
+
+  const clearAutoStopTimer = () => {
+    if (autoStopTimerRef.current) {
+      clearTimeout(autoStopTimerRef.current);
+      autoStopTimerRef.current = null;
+    }
+  };
+
+  const stopActiveRecordingSilently = async () => {
+    clearAutoStopTimer();
+
+    if (recordingRef.current) {
+      try {
+        await recordingRef.current.stopAndUnloadAsync();
+      } catch (error) {
+        console.log("Silent recording cleanup:", error);
+      }
+
+      recordingRef.current = null;
+    }
+
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+    } catch (error) {
+      console.log("Audio mode cleanup failed:", error);
+    }
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      Speech.stop();
+      void stopActiveRecordingSilently();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isListening) {
@@ -283,13 +325,6 @@ export default function SpeakingScreen() {
     barFive,
   ]);
 
-  const clearAutoStopTimer = () => {
-    if (autoStopTimerRef.current) {
-      clearTimeout(autoStopTimerRef.current);
-      autoStopTimerRef.current = null;
-    }
-  };
-
   const speakText = (text: string) => {
     if (!text.trim()) return;
 
@@ -339,6 +374,8 @@ export default function SpeakingScreen() {
       const apiResult = await analyzeSpeechWithBackend(audioUri);
       const mappedResult = mapBackendResult(selectedSentence, apiResult);
 
+      if (!isMountedRef.current) return mappedResult;
+
       setResult(mappedResult);
       await saveSpeakingActivity(mappedResult);
       return mappedResult;
@@ -346,6 +383,8 @@ export default function SpeakingScreen() {
       console.log("Speaking speech backend fallback:", error);
 
       const fallbackResult = buildFallbackResult(selectedSentence);
+
+      if (!isMountedRef.current) return fallbackResult;
 
       setResult(fallbackResult);
       await saveSpeakingActivity(fallbackResult);
@@ -383,25 +422,36 @@ export default function SpeakingScreen() {
         throw new Error("Recording URI not found");
       }
 
-      setMode("responding");
+      if (isMountedRef.current) {
+        setMode("responding");
+      }
 
       await analyzeSpeakingWithBackend(audioUri);
 
-      setMode("analyzed");
-      setShowResultPopup(true);
+      if (isMountedRef.current) {
+        setMode("analyzed");
+        setShowResultPopup(true);
+      }
+
       isStoppingRef.current = false;
     } catch (error) {
       console.log("Failed to stop/analyze audio:", error);
 
       recordingRef.current = null;
-      setMode("responding");
+
+      if (isMountedRef.current) {
+        setMode("responding");
+      }
 
       const fallbackResult = buildFallbackResult(selectedSentence);
-      setResult(fallbackResult);
-      await saveSpeakingActivity(fallbackResult);
 
-      setMode("analyzed");
-      setShowResultPopup(true);
+      if (isMountedRef.current) {
+        setResult(fallbackResult);
+        await saveSpeakingActivity(fallbackResult);
+        setMode("analyzed");
+        setShowResultPopup(true);
+      }
+
       isStoppingRef.current = false;
     }
   };
@@ -411,6 +461,10 @@ export default function SpeakingScreen() {
       Speech.stop();
       clearAutoStopTimer();
       isStoppingRef.current = false;
+
+      if (recordingRef.current) {
+        await stopActiveRecordingSilently();
+      }
 
       const permission = await Audio.requestPermissionsAsync();
 
@@ -439,17 +493,23 @@ export default function SpeakingScreen() {
       await recording.startAsync();
 
       recordingRef.current = recording;
-      setMode("recording");
+
+      if (isMountedRef.current) {
+        setMode("recording");
+      }
 
       autoStopTimerRef.current = setTimeout(() => {
-        stopAudioRecordingAndAnalyze();
+        void stopAudioRecordingAndAnalyze();
       }, AUTO_STOP_MS);
     } catch (error) {
       console.log("Failed to start audio recording:", error);
 
       clearAutoStopTimer();
       recordingRef.current = null;
-      setMode("idle");
+
+      if (isMountedRef.current) {
+        setMode("idle");
+      }
 
       Alert.alert(
         "Recording error",
@@ -464,13 +524,7 @@ export default function SpeakingScreen() {
     isStoppingRef.current = false;
 
     if (recordingRef.current) {
-      try {
-        await recordingRef.current.stopAndUnloadAsync();
-      } catch (error) {
-        console.log("Failed to stop recording while changing sentence:", error);
-      }
-
-      recordingRef.current = null;
+      await stopActiveRecordingSilently();
     }
 
     setSelectedSentence(item);
@@ -603,6 +657,7 @@ export default function SpeakingScreen() {
                   ]}
                   onPress={() => chooseSentence(item)}
                   activeOpacity={0.85}
+                  disabled={mode === "responding"}
                 >
                   <Text
                     style={[
@@ -640,6 +695,7 @@ export default function SpeakingScreen() {
               style={styles.listenIconButton}
               onPress={() => speakText(selectedSentence.text)}
               activeOpacity={0.85}
+              disabled={mode === "responding"}
             >
               <Ionicons
                 name="volume-high-outline"
@@ -748,7 +804,10 @@ export default function SpeakingScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.liveButton}
+              style={[
+                styles.liveButton,
+                mode === "responding" && styles.liveButtonDisabled,
+              ]}
               onPress={handleLivePress}
               activeOpacity={0.85}
               disabled={mode === "responding"}
@@ -1181,8 +1240,8 @@ const styles = StyleSheet.create({
   },
 
   respondingMicCircle: {
-    backgroundColor: "#94A3B8",
-    borderColor: "#94A3B8",
+    backgroundColor: DISABLED_COLOR,
+    borderColor: DISABLED_COLOR,
   },
 
   waveBox: {
@@ -1247,23 +1306,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  liveButton: {
-    width: 96,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: ACTION_COLOR,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-  },
-
-  liveButtonText: {
-    marginLeft: 6,
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-
   dynamicActionButton: {
     flex: 1,
     height: 48,
@@ -1279,13 +1321,34 @@ const styles = StyleSheet.create({
   },
 
   dynamicActionButtonDisabled: {
-    backgroundColor: "#94A3B8",
+    backgroundColor: DISABLED_COLOR,
   },
 
   dynamicActionText: {
     marginLeft: 7,
     color: "#FFFFFF",
     fontSize: 14,
+    fontWeight: "900",
+  },
+
+  liveButton: {
+    width: 96,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: ACTION_COLOR,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+
+  liveButtonDisabled: {
+    backgroundColor: DISABLED_COLOR,
+  },
+
+  liveButtonText: {
+    marginLeft: 6,
+    color: "#FFFFFF",
+    fontSize: 13,
     fontWeight: "900",
   },
 
