@@ -180,11 +180,3 @@ def analyze_sentence(text: str) -> Dict:
         score=78,
         smart_suggestion="Try speaking the same sentence more clearly and naturally.",
     )
-
-
-def fake_transcribe_audio(filename: str) -> str:
-    """
-    MVP placeholder.
-    Later this will be replaced by real speech-to-text.
-    """
-    return "I go market"
