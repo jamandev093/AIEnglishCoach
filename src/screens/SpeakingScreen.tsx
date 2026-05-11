@@ -47,9 +47,13 @@ type SuggestedSentence = {
 const ACTION_COLOR = "#8499DC";
 const RECORDING_COLOR = "#DC2626";
 const DISABLED_COLOR = "#94A3B8";
+
 const MIN_AUTO_STOP_MS = 4000;
 const MEDIUM_AUTO_STOP_MS = 5500;
 const LONG_AUTO_STOP_MS = 7000;
+
+const WAVE_BAR_COUNT = 34;
+const MIN_AUDIO_LEVEL = 0.12;
 
 const suggestedSentences: SuggestedSentence[] = [
   {
@@ -87,7 +91,7 @@ function getAutoStopDuration(sentence: string): number {
 
   return LONG_AUTO_STOP_MS;
 }
-  
+
 function getAutoStopLabel(sentence: string): string {
   const wordCount = sentence.trim().split(/\s+/).filter(Boolean).length;
 
@@ -195,15 +199,16 @@ export default function SpeakingScreen() {
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackWaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
   const isStoppingRef = useRef(false);
   const isMountedRef = useRef(true);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const barOne = useRef(new Animated.Value(14)).current;
-  const barTwo = useRef(new Animated.Value(30)).current;
-  const barThree = useRef(new Animated.Value(18)).current;
-  const barFour = useRef(new Animated.Value(34)).current;
-  const barFive = useRef(new Animated.Value(22)).current;
+
+  const [audioLevel, setAudioLevel] = useState(MIN_AUDIO_LEVEL);
+  const [waveTick, setWaveTick] = useState(0);
 
   const isListening = mode === "recording" || repeatMode === "recording";
   const autoStopLabel = getAutoStopLabel(selectedSentence.text);
@@ -215,11 +220,39 @@ export default function SpeakingScreen() {
     }
   };
 
+  const clearFallbackWaveTimer = () => {
+    if (fallbackWaveTimerRef.current) {
+      clearInterval(fallbackWaveTimerRef.current);
+      fallbackWaveTimerRef.current = null;
+    }
+  };
+
+  const getSpectrumBarHeight = (index: number) => {
+    const center = (WAVE_BAR_COUNT - 1) / 2;
+    const distanceFromCenter = Math.abs(index - center) / center;
+
+    const centerBoost = 1 - distanceFromCenter * 0.55;
+    const softMotion = Math.sin((index + waveTick) * 0.42) * 0.08;
+
+    const level =
+      mode === "responding"
+        ? 0.22
+        : isListening
+        ? Math.max(audioLevel, MIN_AUDIO_LEVEL)
+        : 0.1;
+
+    const height = 8 + level * 52 * (centerBoost + softMotion);
+
+    return Math.max(7, Math.min(height, 58));
+  };
+
   const stopActiveRecordingSilently = async () => {
     clearAutoStopTimer();
+    clearFallbackWaveTimer();
 
     if (recordingRef.current) {
       try {
+        recordingRef.current.setOnRecordingStatusUpdate(null);
         await recordingRef.current.stopAndUnloadAsync();
       } catch (error) {
         console.log("Silent recording cleanup:", error);
@@ -249,14 +282,21 @@ export default function SpeakingScreen() {
   }, []);
 
   useEffect(() => {
+    clearFallbackWaveTimer();
+
     if (!isListening) {
       pulseAnim.setValue(1);
-      barOne.setValue(14);
-      barTwo.setValue(30);
-      barThree.setValue(18);
-      barFour.setValue(34);
-      barFive.setValue(22);
-      return;
+      setAudioLevel(MIN_AUDIO_LEVEL);
+
+      if (mode === "responding") {
+        fallbackWaveTimerRef.current = setInterval(() => {
+          setWaveTick((prev) => prev + 1);
+        }, 180);
+      }
+
+      return () => {
+        clearFallbackWaveTimer();
+      };
     }
 
     const pulseLoop = Animated.loop(
@@ -274,87 +314,17 @@ export default function SpeakingScreen() {
       ])
     );
 
-    const barLoop = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(barOne, {
-            toValue: 34,
-            duration: 420,
-            useNativeDriver: false,
-          }),
-          Animated.timing(barOne, {
-            toValue: 14,
-            duration: 420,
-            useNativeDriver: false,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(barTwo, {
-            toValue: 16,
-            duration: 460,
-            useNativeDriver: false,
-          }),
-          Animated.timing(barTwo, {
-            toValue: 34,
-            duration: 460,
-            useNativeDriver: false,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(barThree, {
-            toValue: 38,
-            duration: 390,
-            useNativeDriver: false,
-          }),
-          Animated.timing(barThree, {
-            toValue: 18,
-            duration: 390,
-            useNativeDriver: false,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(barFour, {
-            toValue: 18,
-            duration: 500,
-            useNativeDriver: false,
-          }),
-          Animated.timing(barFour, {
-            toValue: 36,
-            duration: 500,
-            useNativeDriver: false,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(barFive, {
-            toValue: 40,
-            duration: 450,
-            useNativeDriver: false,
-          }),
-          Animated.timing(barFive, {
-            toValue: 20,
-            duration: 450,
-            useNativeDriver: false,
-          }),
-        ]),
-      ])
-    );
+    fallbackWaveTimerRef.current = setInterval(() => {
+      setWaveTick((prev) => prev + 1);
+    }, 120);
 
     pulseLoop.start();
-    barLoop.start();
 
     return () => {
       pulseLoop.stop();
-      barLoop.stop();
+      clearFallbackWaveTimer();
     };
-  }, [
-    isListening,
-    pulseAnim,
-    barOne,
-    barTwo,
-    barThree,
-    barFour,
-    barFive,
-  ]);
+  }, [isListening, mode, pulseAnim]);
 
   const speakText = (text: string) => {
     if (!text.trim()) return;
@@ -403,9 +373,10 @@ export default function SpeakingScreen() {
   const analyzeSpeakingWithBackend = async (audioUri: string) => {
     try {
       const apiResult = await analyzeSpeechWithBackend(
-      audioUri,
-      selectedSentence.simulatedMistake
+        audioUri,
+        selectedSentence.simulatedMistake
       );
+
       const mappedResult = mapBackendResult(selectedSentence, apiResult);
 
       if (!isMountedRef.current) return mappedResult;
@@ -440,6 +411,8 @@ export default function SpeakingScreen() {
       if (!recording) {
         throw new Error("No active recording found");
       }
+
+      recording.setOnRecordingStatusUpdate(null);
 
       await recording.stopAndUnloadAsync();
 
@@ -494,7 +467,10 @@ export default function SpeakingScreen() {
     try {
       Speech.stop();
       clearAutoStopTimer();
+      clearFallbackWaveTimer();
       isStoppingRef.current = false;
+      setAudioLevel(MIN_AUDIO_LEVEL);
+      setWaveTick(0);
 
       if (recordingRef.current) {
         await stopActiveRecordingSilently();
@@ -520,9 +496,32 @@ export default function SpeakingScreen() {
 
       const recording = new Audio.Recording();
 
-      await recording.prepareToRecordAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      const recordingOptions = {
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        isMeteringEnabled: true,
+      } as any;
+
+      await recording.prepareToRecordAsync(recordingOptions);
+
+      recording.setProgressUpdateInterval(90);
+
+      recording.setOnRecordingStatusUpdate((status) => {
+        const statusWithMetering = status as Audio.RecordingStatus & {
+          metering?: number;
+        };
+
+        if (typeof statusWithMetering.metering === "number") {
+          const normalized = Math.max(
+            0,
+            Math.min(1, (statusWithMetering.metering + 60) / 60)
+          );
+
+          const targetLevel = Math.max(MIN_AUDIO_LEVEL, normalized);
+
+          setAudioLevel((prev) => prev * 0.55 + targetLevel * 0.45);
+          setWaveTick((prev) => prev + 1);
+        }
+      });
 
       await recording.startAsync();
 
@@ -534,14 +533,14 @@ export default function SpeakingScreen() {
 
       const autoStopDuration = getAutoStopDuration(selectedSentence.text);
 
-     autoStopTimerRef.current = setTimeout(() => {
-      void stopAudioRecordingAndAnalyze();
+      autoStopTimerRef.current = setTimeout(() => {
+        void stopAudioRecordingAndAnalyze();
       }, autoStopDuration);
-
     } catch (error) {
       console.log("Failed to start audio recording:", error);
 
       clearAutoStopTimer();
+      clearFallbackWaveTimer();
       recordingRef.current = null;
 
       if (isMountedRef.current) {
@@ -558,6 +557,7 @@ export default function SpeakingScreen() {
   const chooseSentence = async (item: SuggestedSentence) => {
     Speech.stop();
     clearAutoStopTimer();
+    clearFallbackWaveTimer();
     isStoppingRef.current = false;
 
     if (recordingRef.current) {
@@ -569,6 +569,8 @@ export default function SpeakingScreen() {
     setRepeatMode("idle");
     setShowResultPopup(false);
     setResult(buildFallbackResult(item));
+    setAudioLevel(MIN_AUDIO_LEVEL);
+    setWaveTick(0);
   };
 
   const handleMainButton = async () => {
@@ -777,12 +779,24 @@ export default function SpeakingScreen() {
               />
             </Animated.View>
 
-            <View style={styles.waveBox}>
-              <Animated.View style={[styles.waveBar, { height: barOne }]} />
-              <Animated.View style={[styles.waveBar, { height: barTwo }]} />
-              <Animated.View style={[styles.waveBar, { height: barThree }]} />
-              <Animated.View style={[styles.waveBar, { height: barFour }]} />
-              <Animated.View style={[styles.waveBar, { height: barFive }]} />
+            <View style={styles.spectrumBox}>
+              {Array.from({ length: WAVE_BAR_COUNT }).map((_, index) => (
+                <View
+                  key={`spectrum-${index}`}
+                  style={[
+                    styles.spectrumBar,
+                    {
+                      height: getSpectrumBarHeight(index),
+                      opacity:
+                        mode === "recording"
+                          ? 0.55 + audioLevel * 0.45
+                          : mode === "responding"
+                          ? 0.72
+                          : 0.38,
+                    },
+                  ]}
+                />
+              ))}
             </View>
 
             <Text style={styles.recordingTitle}>
@@ -1281,24 +1295,28 @@ const styles = StyleSheet.create({
     borderColor: DISABLED_COLOR,
   },
 
-  waveBox: {
-    width: 140,
-    height: 44,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+  spectrumBox: {
+    width: "100%",
+    maxWidth: 300,
+    height: 76,
+    borderRadius: 20,
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#E0E7FF",
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "center",
-    gap: 7,
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     marginBottom: 12,
+    overflow: "hidden",
   },
 
-  waveBar: {
-    width: 8,
+  spectrumBar: {
+    width: 5,
     borderRadius: 999,
-    backgroundColor: RECORDING_COLOR,
+    backgroundColor: ACTION_COLOR,
   },
 
   recordingTitle: {
