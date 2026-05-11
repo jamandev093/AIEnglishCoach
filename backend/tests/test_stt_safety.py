@@ -50,6 +50,16 @@ def test_stt_mode_default_is_fake():
     assert settings.STT_MODE == "fake"
 
 
+def test_stt_config_placeholders_are_available():
+    assert hasattr(settings, "STT_PROVIDER")
+    assert hasattr(settings, "OPENAI_API_KEY")
+    assert hasattr(settings, "OPENAI_STT_MODEL")
+    assert hasattr(settings, "MAX_AUDIO_SECONDS")
+    assert hasattr(settings, "MAX_AUDIO_MB")
+    assert isinstance(settings.MAX_AUDIO_SECONDS, int)
+    assert isinstance(settings.MAX_AUDIO_MB, int)
+
+
 def test_fake_stt_returns_fake_transcription_without_simulated_text(monkeypatch):
     monkeypatch.setattr(speech_service, "STT_MODE", "fake")
 
@@ -73,6 +83,18 @@ def test_simulated_text_wins_over_fake_stt(monkeypatch):
     assert data["correctedText"] == "I am learning English."
 
 
+def test_simulated_text_wins_over_future_real_stt_config(monkeypatch):
+    monkeypatch.setattr(speech_service, "STT_MODE", "real")
+    monkeypatch.setattr(speech_service, "STT_PROVIDER", "openai")
+
+    response = post_speech_analyze(data={"simulatedText": "I learning English"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["transcribedText"] == "I learning English"
+    assert data["correctedText"] == "I am learning English."
+
+
 def test_speech_response_keeps_required_contract_keys(monkeypatch):
     monkeypatch.setattr(speech_service, "STT_MODE", "fake")
 
@@ -83,6 +105,30 @@ def test_speech_response_keeps_required_contract_keys(monkeypatch):
     assert_required_analyze_keys(data)
     assert data["audioFileName"] == "sample.wav"
     assert data["transcribedText"] == "I learning English"
+
+
+def test_unsupported_stt_mode_falls_back_to_fake_stt(monkeypatch):
+    monkeypatch.setattr(speech_service, "STT_MODE", "unsupported")
+    monkeypatch.setattr(speech_service, "STT_PROVIDER", "openai")
+
+    response = post_speech_analyze()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["transcribedText"] == "I go market"
+    assert data["correctedText"] == "I went to the market."
+
+
+def test_unsupported_stt_provider_falls_back_to_fake_stt(monkeypatch):
+    monkeypatch.setattr(speech_service, "STT_MODE", "real")
+    monkeypatch.setattr(speech_service, "STT_PROVIDER", "unsupported")
+
+    response = post_speech_analyze()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["transcribedText"] == "I go market"
+    assert data["correctedText"] == "I went to the market."
 
 
 def test_fake_stt_does_not_require_api_keys(monkeypatch):
