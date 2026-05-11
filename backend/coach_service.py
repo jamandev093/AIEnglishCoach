@@ -2,12 +2,12 @@ from typing import Dict
 
 from fastapi import UploadFile
 
-from ai_service import analyze_with_ai_fallback
+from ai_service import improve_text_with_ai_or_rule
 from speech_service import transcribe_audio_file
 
 
 def analyze_text(text: str) -> Dict:
-    return analyze_with_ai_fallback(text)
+    return improve_text_with_ai_or_rule(text)
 
 
 async def analyze_speech_file(
@@ -19,7 +19,7 @@ async def analyze_speech_file(
         simulated_text=simulated_text,
     )
 
-    result = analyze_with_ai_fallback(transcribed_text)
+    result = improve_text_with_ai_or_rule(transcribed_text)
     result["audioFileName"] = file.filename
     result["transcribedText"] = transcribed_text
 
