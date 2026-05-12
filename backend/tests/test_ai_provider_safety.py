@@ -47,6 +47,13 @@ def test_ai_mode_default_is_rule():
     assert provider_registry.resolve_ai_mode("unsupported") == "rule"
 
 
+def test_openai_paid_calls_are_disabled_by_default():
+    assert settings.AI_ENABLE_PAID_CALLS is False
+    assert isinstance(settings.AI_MAX_INPUT_CHARS, int)
+    assert isinstance(settings.AI_TIMEOUT_SECONDS, int)
+    assert settings.OPENAI_TEXT_MODEL
+
+
 def test_ai_mode_rule_returns_current_analyzer_output(monkeypatch):
     monkeypatch.setattr(ai_service, "AI_MODE", "rule")
 
@@ -65,14 +72,55 @@ def test_ai_mode_open_source_safely_falls_back_to_rule_output(monkeypatch):
     assert result["correctedText"] == "I am learning English."
 
 
-def test_ai_mode_openai_safely_falls_back_without_api_key(monkeypatch):
+def test_ai_mode_openai_without_paid_calls_falls_back_to_rule(monkeypatch):
     monkeypatch.setattr(ai_service, "AI_MODE", "openai")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(ai_service, "AI_ENABLE_PAID_CALLS", False)
+    monkeypatch.setattr(ai_service, "OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(
+        ai_service,
+        "call_openai_correction_placeholder",
+        lambda text: pytest.fail("Paid OpenAI path should not be reached"),
+    )
 
     result = ai_service.improve_text_with_ai_or_rule("I go market")
 
     assert result == analyze_sentence("I go market")
     assert result["correctedText"] == "I went to the market."
+
+
+def test_ai_mode_openai_safely_falls_back_without_api_key(monkeypatch):
+    monkeypatch.setattr(ai_service, "AI_MODE", "openai")
+    monkeypatch.setattr(ai_service, "AI_ENABLE_PAID_CALLS", True)
+    monkeypatch.setattr(ai_service, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(
+        ai_service,
+        "call_openai_correction_placeholder",
+        lambda text: pytest.fail("Paid OpenAI path should not be reached"),
+    )
+
+    result = ai_service.improve_text_with_ai_or_rule("I go market")
+
+    assert result == analyze_sentence("I go market")
+    assert result["correctedText"] == "I went to the market."
+
+
+@pytest.mark.parametrize("text", ["", "x" * 11])
+def test_empty_or_too_long_input_does_not_trigger_paid_ai(monkeypatch, text):
+    monkeypatch.setattr(ai_service, "AI_MODE", "openai")
+    monkeypatch.setattr(ai_service, "AI_ENABLE_PAID_CALLS", True)
+    monkeypatch.setattr(ai_service, "OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_service, "OPENAI_TEXT_MODEL", "test-model")
+    monkeypatch.setattr(ai_service, "AI_TIMEOUT_SECONDS", 8)
+    monkeypatch.setattr(ai_service, "AI_MAX_INPUT_CHARS", 10)
+    monkeypatch.setattr(
+        ai_service,
+        "call_openai_correction_placeholder",
+        lambda input_text: pytest.fail("Paid OpenAI path should not be reached"),
+    )
+
+    result = ai_service.improve_text_with_ai_or_rule(text)
+
+    assert result == analyze_sentence(text)
 
 
 def test_unsupported_ai_mode_safely_falls_back_to_rule_output(monkeypatch):

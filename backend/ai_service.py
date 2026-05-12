@@ -2,7 +2,14 @@ from typing import Dict
 
 from analyzer import analyze_sentence
 from provider_registry import resolve_ai_mode
-from settings import AI_MODE
+from settings import (
+    AI_ENABLE_PAID_CALLS,
+    AI_MAX_INPUT_CHARS,
+    AI_MODE,
+    AI_TIMEOUT_SECONDS,
+    OPENAI_API_KEY,
+    OPENAI_TEXT_MODEL,
+)
 
 
 def improve_text_with_ai_or_rule(text: str) -> Dict:
@@ -42,9 +49,51 @@ def improve_text_with_openai_placeholder(text: str) -> Dict:
     """
     Placeholder for future paid OpenAI correction.
 
-    No external API calls or API keys are used in Phase 6A. Until OpenAI
-    correction is explicitly implemented, this safely falls back to the
-    rule-based analyzer.
+    No external API calls are made in Phase 6B1. Paid OpenAI correction must
+    pass cost guards first, and the current placeholder still safely falls back
+    to the rule-based analyzer.
+    """
+
+    if not should_attempt_paid_openai_correction(text):
+        return analyze_sentence(text)
+
+    return call_openai_correction_placeholder(text)
+
+
+def should_attempt_paid_openai_correction(text: str) -> bool:
+    normalized_text = text.strip()
+
+    if not AI_ENABLE_PAID_CALLS:
+        return False
+
+    if not OPENAI_API_KEY.strip():
+        return False
+
+    if not OPENAI_TEXT_MODEL.strip():
+        return False
+
+    if AI_TIMEOUT_SECONDS <= 0:
+        return False
+
+    if AI_MAX_INPUT_CHARS <= 0:
+        return False
+
+    if not normalized_text:
+        return False
+
+    if len(normalized_text) > AI_MAX_INPUT_CHARS:
+        return False
+
+    return True
+
+
+def call_openai_correction_placeholder(text: str) -> Dict:
+    """
+    Future OpenAI call boundary.
+
+    Phase 6B1 intentionally does not call OpenAI. Keeping this as a separate
+    boundary makes cost-guard tests prove unsafe input never reaches the paid
+    provider path.
     """
 
     return analyze_sentence(text)

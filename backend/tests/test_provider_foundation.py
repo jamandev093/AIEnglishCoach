@@ -20,6 +20,12 @@ client = TestClient(app)
 
 
 def test_provider_defaults_are_free_first_and_disabled_where_needed():
+    assert settings.AI_MODE == "rule"
+    assert settings.AI_ENABLE_PAID_CALLS is False
+    assert isinstance(settings.AI_MAX_INPUT_CHARS, int)
+    assert isinstance(settings.AI_TIMEOUT_SECONDS, int)
+    assert isinstance(settings.OPENAI_API_KEY, str)
+    assert isinstance(settings.OPENAI_TEXT_MODEL, str)
     assert settings.STT_MODE == "fake"
     assert settings.STT_PROVIDER == "fake"
     assert settings.TTS_MODE == "frontend"
@@ -32,6 +38,7 @@ def test_provider_defaults_are_free_first_and_disabled_where_needed():
 
 
 def test_provider_registry_resolves_unsupported_values_to_safe_defaults():
+    assert provider_registry.resolve_ai_mode("unsupported") == "rule"
     assert provider_registry.resolve_stt_mode("unsupported") == "fake"
     assert provider_registry.resolve_stt_provider("unsupported") == "fake"
     assert provider_registry.resolve_tts_mode("unsupported") == "frontend"
