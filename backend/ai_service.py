@@ -2,6 +2,7 @@ import math
 from typing import Any, Dict
 
 from analyzer import analyze_sentence
+from prompt_templates import build_ai_correction_messages
 from provider_registry import resolve_ai_mode
 from schemas import AI_CORRECTION_RESPONSE_KEYS, AICorrectionResponse
 from settings import (
@@ -49,12 +50,15 @@ def improve_text_with_open_source_placeholder(text: str) -> Dict:
 
 def improve_text_with_openai_placeholder(text: str) -> Dict:
     """
-    Placeholder for future paid OpenAI correction.
+    Guarded skeleton for future paid OpenAI correction.
 
-    No external API calls are made in Phase 6B1. Paid OpenAI correction must
-    pass cost guards first, and the current placeholder still safely falls back
-    to the rule-based analyzer.
+    No external API calls are made in Phase 6B4A. Paid OpenAI correction must
+    pass cost guards first, and the current sender placeholder still safely
+    falls back to the rule-based analyzer.
     """
+
+    if resolve_ai_mode(AI_MODE) != "openai":
+        return analyze_sentence(text)
 
     if not should_attempt_paid_openai_correction(text):
         return analyze_sentence(text)
@@ -93,12 +97,49 @@ def call_openai_correction_placeholder(text: str) -> Dict:
     """
     Future OpenAI call boundary.
 
-    Phase 6B1 intentionally does not call OpenAI. Keeping this as a separate
-    boundary makes cost-guard tests prove unsafe input never reaches the paid
-    provider path.
+    Phase 6B4A intentionally does not call OpenAI. It only builds the future
+    request payload, routes it through a no-op sender placeholder, and validates
+    any mocked response before returning.
     """
 
-    return analyze_sentence(text)
+    try:
+        request_payload = build_openai_correction_request_payload(text)
+        raw_response = send_openai_correction_request_placeholder(request_payload)
+    except Exception:
+        return analyze_sentence(text)
+
+    return normalize_ai_correction_response_or_fallback(raw_response, text)
+
+
+def build_openai_correction_request_payload(text: str) -> Dict:
+    """
+    Build the future OpenAI request payload without sending it.
+
+    The payload shape is intentionally small and testable. A later phase can
+    map this directly to an HTTPX request or SDK call.
+    """
+
+    return {
+        "model": OPENAI_TEXT_MODEL,
+        "input": build_ai_correction_messages(text),
+        "timeout": AI_TIMEOUT_SECONDS,
+        "text": {
+            "format": {
+                "type": "json_object",
+            },
+        },
+    }
+
+
+def send_openai_correction_request_placeholder(request_payload: Dict) -> Any:
+    """
+    No-op placeholder for the future paid OpenAI request.
+
+    Tests can monkeypatch this function to return mocked provider JSON. The
+    default implementation performs no network work and forces rule fallback.
+    """
+
+    return None
 
 
 def normalize_ai_correction_response_or_fallback(
