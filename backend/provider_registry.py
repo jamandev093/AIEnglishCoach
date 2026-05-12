@@ -6,6 +6,7 @@ DEFAULT_TRANSLATION_MODE = "rule"
 DEFAULT_TRANSLATION_PROVIDER = "rule"
 DEFAULT_CACHE_MODE = "disabled"
 DEFAULT_CACHE_PROVIDER = "none"
+DEFAULT_AI_MODE = "rule"
 
 SUPPORTED_STT_MODES = {DEFAULT_STT_MODE, "real"}
 SUPPORTED_STT_PROVIDERS = {DEFAULT_STT_PROVIDER, "local", "openai", "azure", "google"}
@@ -19,6 +20,8 @@ SUPPORTED_TRANSLATION_PROVIDERS = {DEFAULT_TRANSLATION_PROVIDER, "local", "opena
 
 SUPPORTED_CACHE_MODES = {DEFAULT_CACHE_MODE, "memory", "database"}
 SUPPORTED_CACHE_PROVIDERS = {DEFAULT_CACHE_PROVIDER, "memory", "postgres", "redis"}
+
+SUPPORTED_AI_MODES = {DEFAULT_AI_MODE, "open_source", "openai"}
 
 
 def _normalize_provider_value(value: str, default: str) -> str:
@@ -84,3 +87,7 @@ def resolve_cache_provider(value: str) -> str:
         SUPPORTED_CACHE_PROVIDERS,
         DEFAULT_CACHE_PROVIDER,
     )
+
+
+def resolve_ai_mode(value: str) -> str:
+    return _resolve_provider_value(value, SUPPORTED_AI_MODES, DEFAULT_AI_MODE)

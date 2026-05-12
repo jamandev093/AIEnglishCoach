@@ -1,6 +1,7 @@
 import os
 
 from provider_registry import (
+    DEFAULT_AI_MODE,
     DEFAULT_CACHE_MODE,
     DEFAULT_CACHE_PROVIDER,
     DEFAULT_STT_MODE,
@@ -26,7 +27,7 @@ def _get_int_env(name: str, default: int) -> int:
 
 APP_NAME = "AI English Coach Backend"
 APP_VERSION = "1.0.0"
-AI_MODE = "rule"
+AI_MODE = os.getenv("AI_MODE", DEFAULT_AI_MODE).strip().lower() or DEFAULT_AI_MODE
 STT_MODE = os.getenv("STT_MODE", DEFAULT_STT_MODE).strip().lower() or DEFAULT_STT_MODE
 STT_PROVIDER = (
     os.getenv("STT_PROVIDER", DEFAULT_STT_PROVIDER).strip().lower()
