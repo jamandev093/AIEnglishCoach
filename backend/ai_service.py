@@ -1,5 +1,8 @@
+import json
 import math
 from typing import Any, Dict
+
+import httpx
 
 from analyzer import analyze_sentence
 from prompt_templates import build_ai_correction_messages
@@ -11,6 +14,8 @@ from settings import (
     AI_MODE,
     AI_TIMEOUT_SECONDS,
     OPENAI_API_KEY,
+    OPENAI_BASE_URL,
+    OPENAI_MAX_OUTPUT_TOKENS,
     OPENAI_TEXT_MODEL,
 )
 
@@ -95,16 +100,16 @@ def should_attempt_paid_openai_correction(text: str) -> bool:
 
 def call_openai_correction_placeholder(text: str) -> Dict:
     """
-    Future OpenAI call boundary.
+    Guarded OpenAI call boundary.
 
-    Phase 6B4A intentionally does not call OpenAI. It only builds the future
-    request payload, routes it through a no-op sender placeholder, and validates
-    any mocked response before returning.
+    The caller must pass cost guards before reaching this function. Any OpenAI
+    error, timeout, malformed response, or schema validation issue falls back
+    to the rule-based analyzer.
     """
 
     try:
         request_payload = build_openai_correction_request_payload(text)
-        raw_response = send_openai_correction_request_placeholder(request_payload)
+        raw_response = send_openai_correction_request(request_payload)
     except Exception:
         return analyze_sentence(text)
 
@@ -123,6 +128,7 @@ def build_openai_correction_request_payload(text: str) -> Dict:
         "model": OPENAI_TEXT_MODEL,
         "input": build_ai_correction_messages(text),
         "timeout": AI_TIMEOUT_SECONDS,
+        "max_output_tokens": OPENAI_MAX_OUTPUT_TOKENS,
         "text": {
             "format": {
                 "type": "json_object",
@@ -131,15 +137,75 @@ def build_openai_correction_request_payload(text: str) -> Dict:
     }
 
 
-def send_openai_correction_request_placeholder(request_payload: Dict) -> Any:
+def send_openai_correction_request(request_payload: Dict) -> Any:
     """
-    No-op placeholder for the future paid OpenAI request.
+    Send a guarded OpenAI Responses API request and return parsed AI JSON.
 
-    Tests can monkeypatch this function to return mocked provider JSON. The
-    default implementation performs no network work and forces rule fallback.
+    Tests must monkeypatch this function or post_openai_responses_request so no
+    paid API request is made during automated test runs.
     """
 
-    return None
+    response_data = post_openai_responses_request(request_payload)
+    output_text = extract_openai_output_text(response_data)
+
+    return parse_openai_json_output(output_text)
+
+
+def post_openai_responses_request(request_payload: Dict) -> Dict:
+    api_payload = {
+        key: value for key, value in request_payload.items() if key != "timeout"
+    }
+    timeout_seconds = request_payload.get("timeout", AI_TIMEOUT_SECONDS)
+    url = f"{OPENAI_BASE_URL}/responses"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    with httpx.Client(timeout=timeout_seconds) as client:
+        response = client.post(url, headers=headers, json=api_payload)
+        response.raise_for_status()
+        return response.json()
+
+
+def extract_openai_output_text(response_data: Any) -> str:
+    if not isinstance(response_data, dict):
+        raise ValueError("OpenAI response must be a JSON object")
+
+    output_text = response_data.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text
+
+    output_items = response_data.get("output")
+    if not isinstance(output_items, list):
+        raise ValueError("OpenAI response is missing output text")
+
+    for output_item in output_items:
+        if not isinstance(output_item, dict):
+            continue
+
+        for content_item in output_item.get("content", []):
+            if not isinstance(content_item, dict):
+                continue
+
+            if content_item.get("type") == "refusal":
+                raise ValueError("OpenAI refused the correction request")
+
+            if content_item.get("type") in {"output_text", "text"}:
+                text = content_item.get("text")
+                if isinstance(text, str) and text.strip():
+                    return text
+
+    raise ValueError("OpenAI response is missing output text")
+
+
+def parse_openai_json_output(output_text: str) -> Dict:
+    parsed_output = json.loads(output_text)
+
+    if not isinstance(parsed_output, dict):
+        raise ValueError("OpenAI output must be a JSON object")
+
+    return parsed_output
 
 
 def normalize_ai_correction_response_or_fallback(

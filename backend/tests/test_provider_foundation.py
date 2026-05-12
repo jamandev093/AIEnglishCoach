@@ -26,6 +26,8 @@ def test_provider_defaults_are_free_first_and_disabled_where_needed():
     assert isinstance(settings.AI_TIMEOUT_SECONDS, int)
     assert isinstance(settings.OPENAI_API_KEY, str)
     assert isinstance(settings.OPENAI_TEXT_MODEL, str)
+    assert isinstance(settings.OPENAI_BASE_URL, str)
+    assert isinstance(settings.OPENAI_MAX_OUTPUT_TOKENS, int)
     assert settings.STT_MODE == "fake"
     assert settings.STT_PROVIDER == "fake"
     assert settings.TTS_MODE == "frontend"

@@ -46,6 +46,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_TEXT_MODEL = (
     os.getenv("OPENAI_TEXT_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
 )
+OPENAI_BASE_URL = (
+    os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
+    or "https://api.openai.com/v1"
+)
+OPENAI_MAX_OUTPUT_TOKENS = _get_int_env("OPENAI_MAX_OUTPUT_TOKENS", 700)
 AI_MAX_INPUT_CHARS = _get_int_env("AI_MAX_INPUT_CHARS", 1000)
 AI_TIMEOUT_SECONDS = _get_int_env("AI_TIMEOUT_SECONDS", 8)
 AI_ENABLE_PAID_CALLS = _get_bool_env("AI_ENABLE_PAID_CALLS", False)
