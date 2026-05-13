@@ -75,3 +75,16 @@ def test_topics_do_not_return_unpublished_sample_item():
     ids = {item["id"] for item in data["items"]}
 
     assert "topic-hidden-001" not in ids
+
+
+def test_public_content_endpoints_use_json_store_items():
+    response = client.get("/content/topics")
+
+    assert response.status_code == 200
+
+    data = response.json()
+    ids = {item["id"] for item in data["items"]}
+
+    assert "topic-001" in ids
+    assert "topic-002" in ids
+    assert "topic-hidden-001" not in ids
