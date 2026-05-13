@@ -18,6 +18,10 @@ import {
   type AnalyzeApiResponse,
 } from "../config/api";
 import { addActivity } from "../utils/activityHistory";
+import {
+  getSelectedTopic,
+  type SelectedTopicData,
+} from "../utils/selectedTopicStore";
 
 type SpeakingMode = "idle" | "recording" | "responding" | "analyzed";
 type RepeatMode = "idle" | "recording" | "saved";
@@ -77,6 +81,20 @@ const suggestedSentences: SuggestedSentence[] = [
     simulatedMistake: "Can you repeat slow",
   },
 ];
+
+
+function formatTopicLabel(value: string): string {
+  return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getTopicLevelLabel(level: SelectedTopicData["level"]): string {
+  if (level === "advanced") return "Advanced";
+  if (level === "intermediate") return "Intermediate";
+  return "Beginner";
+}
 
 function getAutoStopDuration(sentence: string): number {
   const wordCount = sentence.trim().split(/\s+/).filter(Boolean).length;
@@ -189,6 +207,9 @@ function mapBackendResult(
 export default function SpeakingScreen() {
   const [mode, setMode] = useState<SpeakingMode>("idle");
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("idle");
+  const [selectedTopic, setSelectedTopic] = useState<SelectedTopicData | null>(
+    null
+  );
   const [selectedSentence, setSelectedSentence] = useState<SuggestedSentence>(
     suggestedSentences[0]
   );
@@ -270,6 +291,33 @@ export default function SpeakingScreen() {
       console.log("Audio mode cleanup failed:", error);
     }
   };
+
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSelectedTopic = async () => {
+      try {
+        const savedTopic = await getSelectedTopic();
+
+        if (!isMounted) return;
+
+        setSelectedTopic(savedTopic);
+      } catch (error) {
+        console.log("Failed to load selected topic:", error);
+
+        if (isMounted) {
+          setSelectedTopic(null);
+        }
+      }
+    };
+
+    loadSelectedTopic();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -660,6 +708,51 @@ export default function SpeakingScreen() {
             <Ionicons name="mic-outline" size={24} color={ACTION_COLOR} />
           </View>
         </View>
+
+        {selectedTopic && (
+          <View style={styles.selectedTopicCard}>
+            <View style={styles.selectedTopicTopRow}>
+              <View style={styles.selectedTopicIcon}>
+                <Ionicons
+                  name="chatbubbles-outline"
+                  size={22}
+                  color={ACTION_COLOR}
+                />
+              </View>
+
+              <View style={styles.selectedTopicTextBox}>
+                <Text style={styles.selectedTopicLabel}>Selected Topic</Text>
+                <Text style={styles.selectedTopicTitle}>
+                  {selectedTopic.title}
+                </Text>
+                <Text style={styles.selectedTopicMeta}>
+                  {formatTopicLabel(selectedTopic.category)} ?{" "}
+                  {getTopicLevelLabel(selectedTopic.level)}
+                </Text>
+              </View>
+
+              {selectedTopic.isPremium && (
+                <View style={styles.selectedTopicBadge}>
+                  <Text style={styles.selectedTopicBadgeText}>Premium</Text>
+                </View>
+              )}
+            </View>
+
+            <Text style={styles.selectedTopicPrompt}>
+              {selectedTopic.prompt}
+            </Text>
+
+            {selectedTopic.sentenceStarters.length > 0 && (
+              <View style={styles.selectedTopicChipWrap}>
+                {selectedTopic.sentenceStarters.slice(0, 3).map((starter) => (
+                  <View key={starter} style={styles.selectedTopicChip}>
+                    <Text style={styles.selectedTopicChipText}>{starter}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.suggestionCard}>
           <View style={styles.cardTopRow}>
@@ -1130,6 +1223,96 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  selectedTopicCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 18,
+  },
+
+  selectedTopicTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  selectedTopicIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  selectedTopicTextBox: {
+    flex: 1,
+    paddingRight: 10,
+  },
+
+  selectedTopicLabel: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "900",
+    marginBottom: 3,
+  },
+
+  selectedTopicTitle: {
+    fontSize: 18,
+    color: "#0F172A",
+    fontWeight: "900",
+    marginBottom: 3,
+  },
+
+  selectedTopicMeta: {
+    fontSize: 12,
+    color: ACTION_COLOR,
+    fontWeight: "900",
+  },
+
+  selectedTopicBadge: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+
+  selectedTopicBadgeText: {
+    fontSize: 10,
+    color: "#92400E",
+    fontWeight: "900",
+  },
+
+  selectedTopicPrompt: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#334155",
+    fontWeight: "800",
+  },
+
+  selectedTopicChipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 11,
+  },
+
+  selectedTopicChip: {
+    backgroundColor: "#EEF2FF",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  selectedTopicChipText: {
+    fontSize: 11,
+    color: ACTION_COLOR,
+    fontWeight: "900",
   },
 
   suggestionCard: {
