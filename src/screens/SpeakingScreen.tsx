@@ -96,6 +96,33 @@ function getTopicLevelLabel(level: SelectedTopicData["level"]): string {
   return "Beginner";
 }
 
+
+function buildSuggestedSentenceFromTopic(
+  topic: SelectedTopicData
+): SuggestedSentence {
+  const sentenceText =
+    topic.expectedResponse ||
+    topic.sentenceStarters[0] ||
+    topic.prompt ||
+    `I want to practice ${topic.title}.`;
+
+  const starterText =
+    topic.sentenceStarters.length > 0
+      ? topic.sentenceStarters[0].replace(/\.\.\.$/, "").trim()
+      : "";
+
+  const simulatedMistake =
+    starterText.length > 0
+      ? `${starterText} ${topic.title.toLowerCase()}`
+      : sentenceText;
+
+  return {
+    text: sentenceText,
+    purpose: `${topic.title} topic`,
+    simulatedMistake,
+  };
+}
+
 function getAutoStopDuration(sentence: string): number {
   const wordCount = sentence.trim().split(/\s+/).filter(Boolean).length;
 
@@ -303,6 +330,16 @@ export default function SpeakingScreen() {
         if (!isMounted) return;
 
         setSelectedTopic(savedTopic);
+
+        if (savedTopic) {
+          const topicSentence = buildSuggestedSentenceFromTopic(savedTopic);
+
+          setSelectedSentence(topicSentence);
+          setResult(buildFallbackResult(topicSentence));
+          setMode("idle");
+          setRepeatMode("idle");
+          setShowResultPopup(false);
+        }
       } catch (error) {
         console.log("Failed to load selected topic:", error);
 
@@ -691,6 +728,10 @@ export default function SpeakingScreen() {
     return "mic-outline";
   };
 
+  const selectedTopicSentence = selectedTopic
+    ? buildSuggestedSentenceFromTopic(selectedTopic)
+    : null;
+
   return (
     <>
       <ScrollView
@@ -767,7 +808,9 @@ export default function SpeakingScreen() {
             <View style={styles.cardTitleBox}>
               <Text style={styles.cardTitle}>Sentence Suggestions</Text>
               <Text style={styles.cardSubtitle}>
-                Choose one sentence, listen first, then speak it aloud.
+                {selectedTopic
+                  ? "Practice the selected topic sentence, or choose another sentence."
+                  : "Choose one sentence, listen first, then speak it aloud."}
               </Text>
             </View>
           </View>
@@ -777,6 +820,40 @@ export default function SpeakingScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.sentenceRow}
           >
+            {selectedTopicSentence && (
+              <TouchableOpacity
+                key={`topic-${selectedTopic.id}`}
+                style={[
+                  styles.sentenceCard,
+                  selectedSentence.text === selectedTopicSentence.text &&
+                    styles.sentenceCardActive,
+                ]}
+                onPress={() => chooseSentence(selectedTopicSentence)}
+                activeOpacity={0.85}
+                disabled={mode === "responding"}
+              >
+                <Text
+                  style={[
+                    styles.sentencePurpose,
+                    selectedSentence.text === selectedTopicSentence.text &&
+                      styles.sentencePurposeActive,
+                  ]}
+                >
+                  Selected Topic
+                </Text>
+
+                <Text
+                  style={[
+                    styles.sentenceText,
+                    selectedSentence.text === selectedTopicSentence.text &&
+                      styles.sentenceTextActive,
+                  ]}
+                >
+                  {selectedTopicSentence.text}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {suggestedSentences.map((item) => {
               const active = selectedSentence.text === item.text;
 
