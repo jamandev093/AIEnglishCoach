@@ -1,4 +1,4 @@
-﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const SELECTED_TOPIC_STORAGE_KEY = "ai_english_coach_selected_topic";
 
