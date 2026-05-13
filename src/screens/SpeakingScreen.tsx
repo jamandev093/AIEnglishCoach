@@ -19,6 +19,7 @@ import {
 } from "../config/api";
 import { addActivity } from "../utils/activityHistory";
 import {
+  clearSelectedTopic,
   getSelectedTopic,
   type SelectedTopicData,
 } from "../utils/selectedTopicStore";
@@ -703,6 +704,29 @@ export default function SpeakingScreen() {
     await startAudioRecording();
   };
 
+  const handleClearSelectedTopic = async () => {
+    try {
+      await clearSelectedTopic();
+
+      const defaultSentence = suggestedSentences[0];
+
+      setSelectedTopic(null);
+      setSelectedSentence(defaultSentence);
+      setResult(buildFallbackResult(defaultSentence));
+      setMode("idle");
+      setRepeatMode("idle");
+      setShowResultPopup(false);
+      Speech.stop();
+    } catch (error) {
+      console.log("Failed to clear selected topic:", error);
+
+      Alert.alert(
+        "Clear topic failed",
+        "Please try again. The selected topic could not be cleared."
+      );
+    }
+  };
+
   const handleLivePress = () => {
     Alert.alert(
       "Live conversation coming later",
@@ -792,6 +816,18 @@ export default function SpeakingScreen() {
                 ))}
               </View>
             )}
+
+            <TouchableOpacity
+              style={styles.clearTopicButton}
+              onPress={handleClearSelectedTopic}
+              activeOpacity={0.85}
+              disabled={mode === "responding"}
+            >
+              <Ionicons name="close-circle-outline" size={17} color="#334155" />
+              <Text style={styles.clearTopicButtonText}>
+                Clear topic and use normal speaking
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1389,6 +1425,25 @@ const styles = StyleSheet.create({
   selectedTopicChipText: {
     fontSize: 11,
     color: ACTION_COLOR,
+    fontWeight: "900",
+  },
+
+  clearTopicButton: {
+    marginTop: 12,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+
+  clearTopicButtonText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: "#334155",
     fontWeight: "900",
   },
 
