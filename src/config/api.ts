@@ -148,3 +148,111 @@ export async function analyzeSpeechWithBackend(
 
   return normalizeAnalyzeResponse(data, cleanSimulatedText);
 }
+export type ContentType =
+  | "story"
+  | "confidenceVideo"
+  | "readingListening"
+  | "topic";
+
+export type ContentLevel = "beginner" | "intermediate" | "advanced";
+
+export type ContentLanguageSupport = "englishOnly" | "nativeSupport" | "both";
+
+export type ContentItem = {
+  id: string;
+  type: ContentType;
+  title: string;
+  level: ContentLevel;
+  category: string;
+  languageSupport: ContentLanguageSupport;
+  prompt: string;
+  expectedResponse?: string | null;
+  sentenceStarters: string[];
+  keyWords: string[];
+  mediaUrl?: string | null;
+  isPublished: boolean;
+  isPremium: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ContentListResponse = {
+  success: boolean;
+  count: number;
+  items: ContentItem[];
+};
+
+type RawContentItem = Partial<ContentItem>;
+
+type RawContentListResponse = {
+  success?: boolean;
+  count?: number;
+  items?: RawContentItem[];
+};
+
+function normalizeContentItem(item: RawContentItem): ContentItem {
+  return {
+    id: item.id || "unknown-content-id",
+    type: item.type || "story",
+    title: item.title || "Untitled Content",
+    level: item.level || "beginner",
+    category: item.category || "general",
+    languageSupport: item.languageSupport || "both",
+    prompt: item.prompt || "Practice speaking with this content.",
+    expectedResponse: item.expectedResponse ?? null,
+    sentenceStarters: Array.isArray(item.sentenceStarters)
+      ? item.sentenceStarters
+      : [],
+    keyWords: Array.isArray(item.keyWords) ? item.keyWords : [],
+    mediaUrl: item.mediaUrl ?? null,
+    isPublished:
+      typeof item.isPublished === "boolean" ? item.isPublished : true,
+    isPremium: typeof item.isPremium === "boolean" ? item.isPremium : false,
+    createdAt: item.createdAt || "",
+    updatedAt: item.updatedAt || "",
+  };
+}
+
+function normalizeContentListResponse(
+  data: RawContentListResponse,
+): ContentListResponse {
+  const items = Array.isArray(data.items)
+    ? data.items.map(normalizeContentItem)
+    : [];
+
+  return {
+    success: data.success ?? true,
+    count: typeof data.count === "number" ? data.count : items.length,
+    items,
+  };
+}
+
+async function fetchContentList(endpoint: string): Promise<ContentListResponse> {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Content request failed: ${response.status}`);
+  }
+
+  const data = (await response.json()) as RawContentListResponse;
+
+  return normalizeContentListResponse(data);
+}
+
+export async function getStoriesContent(): Promise<ContentListResponse> {
+  return fetchContentList("/content/stories");
+}
+
+export async function getConfidenceVideosContent(): Promise<ContentListResponse> {
+  return fetchContentList("/content/confidence-videos");
+}
+
+export async function getReadingListeningContent(): Promise<ContentListResponse> {
+  return fetchContentList("/content/reading-listening");
+}
+
+export async function getConversationTopicsContent(): Promise<ContentListResponse> {
+  return fetchContentList("/content/topics");
+}
