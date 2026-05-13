@@ -1,7 +1,10 @@
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from coach_service import analyze_speech_file, analyze_text as analyze_text_service
+from admin_content_service import create_admin_content_item, list_admin_content_items
+from admin_security import require_admin_key
+from content_schemas import ContentItem
 from content_service import get_confidence_videos, get_reading_listening, get_stories, get_topics
 from schemas import AnalyzeRequest
 from settings import APP_NAME, APP_VERSION
@@ -58,6 +61,20 @@ def content_reading_listening():
 def content_topics():
     return get_topics()
 
+
+
+
+@app.get("/admin/content")
+def admin_list_content(_admin_access: bool = Depends(require_admin_key)):
+    return list_admin_content_items()
+
+
+@app.post("/admin/content")
+def admin_create_content(
+    item: ContentItem,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return create_admin_content_item(item)
 
 @app.post("/analyze")
 def analyze_text(request: AnalyzeRequest):
