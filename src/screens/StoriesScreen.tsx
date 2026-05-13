@@ -15,7 +15,9 @@ import {
 
 import {
   analyzeSentenceWithBackend,
+  getStoriesContent,
   type AnalyzeApiResponse,
+  type ContentItem,
 } from "../config/api";
 import { addActivity } from "../utils/activityHistory";
 
@@ -235,6 +237,88 @@ const storyTasks: StoryTask[] = [
   },
 ];
 
+
+function toStoryLevel(level: ContentItem["level"]): StoryLevel {
+  if (level === "advanced") return "Advanced";
+  if (level === "intermediate") return "Intermediate";
+  return "Beginner";
+}
+
+function formatCategoryLabel(category: string): string {
+  return category
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getStoryEmoji(category: string): string {
+  const normalizedCategory = category.toLowerCase();
+
+  if (normalizedCategory.includes("market")) return "??";
+  if (normalizedCategory.includes("school")) return "??";
+  if (normalizedCategory.includes("health")) return "??";
+  if (normalizedCategory.includes("travel")) return "??";
+  if (normalizedCategory.includes("park")) return "??";
+
+  return "???";
+}
+
+function buildStoryFromContent(item: ContentItem): StoryTask {
+  const title = item.title || "Story Practice";
+  const topic = formatCategoryLabel(item.category || "Story");
+  const expectedStory =
+    item.expectedResponse ||
+    item.prompt ||
+    "Tell a short story in your own words.";
+  const hintWords =
+    item.keyWords.length > 0 ? item.keyWords : ["story", "picture", "speak"];
+  const sentenceStarters =
+    item.sentenceStarters.length > 0
+      ? item.sentenceStarters
+      : ["First,", "Then,", "After that,"];
+
+  return {
+    id: item.id,
+    title,
+    level: toStoryLevel(item.level),
+    topic,
+    prompt: item.prompt,
+    frames: [
+      {
+        emoji: getStoryEmoji(item.category),
+        title,
+        simpleLine: item.prompt,
+        detail:
+          item.expectedResponse ||
+          "Look carefully, think about the situation, and speak your own story.",
+      },
+    ],
+    hintWords,
+    sentenceStarters,
+    sampleUserStory: expectedStory,
+    correctStory: expectedStory,
+    englishMeaning:
+      "This story practice helps you observe a situation and speak about it in simple English.",
+    meaningHindi:
+      "?? ?????? ???? ?????? ????? ??? ????????? ??? ????? ??? ??? ???? ???",
+    meaningBengali:
+      "?? ??????? ?????? ????????? ???? ??? ???????? ???? ??????? ????",
+    mistake:
+      "The app will check grammar, sentence order, and clarity after you speak.",
+    correction:
+      "Use clear sentence order and simple correct verbs when you tell the story.",
+    teacherExplanation:
+      "A good spoken story usually has a clear beginning, middle, and ending. Use simple connectors like First, Then, and Finally.",
+    smartSuggestion: expectedStory,
+  };
+}
+
+function buildStoriesFromContent(items: ContentItem[]): StoryTask[] {
+  const backendStories = items.map(buildStoryFromContent);
+
+  return backendStories.length > 0 ? backendStories : storyTasks;
+}
+
 function getBaseScore(level: StoryLevel) {
   if (level === "Beginner") return 70;
   if (level === "Intermediate") return 68;
@@ -327,7 +411,10 @@ export default function StoriesScreen() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
+  const [stories, setStories] = useState<StoryTask[]>(storyTasks);
   const [selectedStory, setSelectedStory] = useState<StoryTask>(storyTasks[0]);
+  const [storiesLoading, setStoriesLoading] = useState(false);
+  const [storiesError, setStoriesError] = useState<string | null>(null);
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
@@ -361,6 +448,46 @@ export default function StoriesScreen() {
       loadProfileAndSettings();
     }, [])
   );
+
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadStoriesFromBackend = async () => {
+      try {
+        setStoriesLoading(true);
+        setStoriesError(null);
+
+        const response = await getStoriesContent();
+        const backendStories = buildStoriesFromContent(response.items);
+
+        if (!isMounted) return;
+
+        setStories(backendStories);
+        setSelectedStory(backendStories[0]);
+        setResultData(buildDefaultResult(backendStories[0]));
+      } catch (error) {
+        console.log("Stories content fallback:", error);
+
+        if (!isMounted) return;
+
+        setStories(storyTasks);
+        setSelectedStory(storyTasks[0]);
+        setResultData(buildDefaultResult(storyTasks[0]));
+        setStoriesError("Using saved story practice while backend content loads.");
+      } finally {
+        if (isMounted) {
+          setStoriesLoading(false);
+        }
+      }
+    };
+
+    loadStoriesFromBackend();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isRecording) {
@@ -634,12 +761,22 @@ export default function StoriesScreen() {
           <Text style={styles.sectionTitle}>Choose Story</Text>
         </View>
 
+        {storiesLoading && (
+          <Text style={styles.contentStatusText}>
+            Loading stories from backend...
+          </Text>
+        )}
+
+        {storiesError && (
+          <Text style={styles.contentStatusText}>{storiesError}</Text>
+        )}
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.storyRow}
         >
-          {storyTasks.map((story) => {
+          {stories.map((story) => {
             const active = story.id === selectedStory.id;
 
             return (
@@ -1090,6 +1227,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
     color: "#0F172A",
+  },
+
+  contentStatusText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+    fontWeight: "700",
+    marginTop: -4,
+    marginBottom: 10,
   },
 
   storyRow: {
