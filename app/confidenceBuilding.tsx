@@ -15,7 +15,9 @@ import {
 
 import {
   analyzeSentenceWithBackend,
+  getConfidenceVideosContent,
   type AnalyzeApiResponse,
+  type ContentItem,
 } from "../src/config/api";
 import { addActivity } from "../src/utils/activityHistory";
 
@@ -139,6 +141,65 @@ const missions: ConfidenceMission[] = [
   },
 ];
 
+
+function formatContentLevel(level: ContentItem["level"]): string {
+  if (level === "advanced") return "Advanced";
+  if (level === "intermediate") return "Intermediate";
+  return "Beginner";
+}
+
+function getConfidenceEmoji(category: string): string {
+  const normalizedCategory = category.toLowerCase();
+
+  if (normalizedCategory.includes("shop")) return "??";
+  if (normalizedCategory.includes("school")) return "?????";
+  if (normalizedCategory.includes("office")) return "??";
+  if (normalizedCategory.includes("health")) return "??";
+  if (normalizedCategory.includes("travel")) return "??";
+
+  return "??";
+}
+
+function buildMissionFromContent(item: ContentItem): ConfidenceMission {
+  const expectedResponse =
+    item.expectedResponse ||
+    "I can speak clearly and confidently in this situation.";
+
+  return {
+    id: item.id,
+    title: item.title || "Confidence Mission",
+    situation: item.prompt || "A real-life speaking situation.",
+    emotion: "Confident",
+    accent: "AI Coach",
+    level: formatContentLevel(item.level),
+    videoLength: "10 sec",
+    videoEmoji: getConfidenceEmoji(item.category),
+    videoScene:
+      item.prompt ||
+      "Watch the short situation and describe what is happening.",
+    prompt:
+      item.prompt ||
+      "Speak what you are seeing in the video in a confident way.",
+    sentenceStarters:
+      item.sentenceStarters.length > 0
+        ? item.sentenceStarters
+        : ["In this video...", "I can see...", "The person is..."],
+    expectedResponse,
+    userSample: expectedResponse,
+    betterResponse: expectedResponse,
+    mistake:
+      "The app will check your grammar, small missing words, and confidence after you speak.",
+    coachTip:
+      "Good effort. Speak in a full sentence, keep your voice clear, and repeat the improved response.",
+  };
+}
+
+function buildMissionsFromContent(items: ContentItem[]): ConfidenceMission[] {
+  const backendMissions = items.map(buildMissionFromContent);
+
+  return backendMissions.length > 0 ? backendMissions : missions;
+}
+
 function buildFallbackResult(
   mission: ConfidenceMission,
   spokenText: string
@@ -216,9 +277,12 @@ function mapBackendResult(
 }
 
 export default function ConfidenceBuildingScreen() {
+  const [missionList, setMissionList] = useState<ConfidenceMission[]>(missions);
   const [selectedMission, setSelectedMission] = useState<ConfidenceMission>(
     missions[0]
   );
+  const [missionsLoading, setMissionsLoading] = useState(false);
+  const [missionsError, setMissionsError] = useState<string | null>(null);
   const [missionState, setMissionState] = useState<MissionState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
@@ -244,6 +308,50 @@ export default function ConfidenceBuildingScreen() {
       Speech.stop();
     }, [])
   );
+
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadConfidenceMissions = async () => {
+      try {
+        setMissionsLoading(true);
+        setMissionsError(null);
+
+        const response = await getConfidenceVideosContent();
+        const backendMissions = buildMissionsFromContent(response.items);
+
+        if (!isMounted) return;
+
+        setMissionList(backendMissions);
+        setSelectedMission(backendMissions[0]);
+        setUserAnswer("");
+        setResultData(null);
+      } catch (error) {
+        console.log("Confidence content fallback:", error);
+
+        if (!isMounted) return;
+
+        setMissionList(missions);
+        setSelectedMission(missions[0]);
+        setUserAnswer("");
+        setResultData(null);
+        setMissionsError(
+          "Using saved confidence missions while backend content loads."
+        );
+      } finally {
+        if (isMounted) {
+          setMissionsLoading(false);
+        }
+      }
+    };
+
+    loadConfidenceMissions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isRecording) {
@@ -364,7 +472,7 @@ export default function ConfidenceBuildingScreen() {
     try {
       const backendResult = await analyzeSentenceWithBackend(spokenText);
       return mapBackendResult(selectedMission, spokenText, backendResult);
-    } catch (error) {
+    } catch {
       return buildFallbackResult(selectedMission, spokenText);
     }
   };
@@ -511,12 +619,22 @@ export default function ConfidenceBuildingScreen() {
           <Text style={styles.sectionTitle}>10-Second Missions</Text>
         </View>
 
+        {missionsLoading && (
+          <Text style={styles.contentStatusText}>
+            Loading confidence missions from backend...
+          </Text>
+        )}
+
+        {missionsError && (
+          <Text style={styles.contentStatusText}>{missionsError}</Text>
+        )}
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.missionRow}
         >
-          {missions.map((mission) => {
+          {missionList.map((mission) => {
             const active = selectedMission.id === mission.id;
 
             return (
@@ -1002,6 +1120,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
     color: "#0F172A",
+  },
+
+  contentStatusText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+    fontWeight: "700",
+    marginTop: -4,
+    marginBottom: 10,
   },
 
   missionRow: {
