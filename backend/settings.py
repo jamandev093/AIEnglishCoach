@@ -1,4 +1,29 @@
 import os
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+
+def _load_local_env() -> None:
+    """Load backend/.env for local development only.
+
+    Safe rules:
+    - Does not require .env to exist.
+    - Does not override real environment variables.
+    - Keeps Render/dashboard environment variables unaffected.
+    - Does not print or log secrets.
+    """
+    if load_dotenv is None:
+        return
+
+    local_env_path = Path(__file__).with_name(".env")
+    load_dotenv(dotenv_path=local_env_path, override=False)
+
+
+_load_local_env()
 
 from provider_registry import (
     DEFAULT_AI_MODE,

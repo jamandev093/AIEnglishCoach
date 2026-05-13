@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 from typing import Any, Dict
 
@@ -8,6 +9,8 @@ from analyzer import analyze_sentence
 from prompt_templates import build_ai_correction_messages
 from provider_registry import resolve_ai_mode
 from schemas import AI_CORRECTION_RESPONSE_KEYS, AICorrectionResponse
+logger = logging.getLogger(__name__)
+
 from settings import (
     AI_ENABLE_PAID_CALLS,
     AI_MAX_INPUT_CHARS,
@@ -162,10 +165,19 @@ def post_openai_responses_request(request_payload: Dict) -> Dict:
         "Content-Type": "application/json",
     }
 
-    with httpx.Client(timeout=timeout_seconds) as client:
-        response = client.post(url, headers=headers, json=api_payload)
-        response.raise_for_status()
-        return response.json()
+    try:
+        logger.info("AI provider selected = openai")
+        with httpx.Client(timeout=timeout_seconds) as client:
+            response = client.post(url, headers=headers, json=api_payload)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response is not None else "unknown"
+        logger.warning("OpenAI HTTP error status=%s", status_code)
+        raise ValueError("OpenAI request failed") from exc
+    except httpx.RequestError as exc:
+        logger.warning("OpenAI request error type=%s", exc.__class__.__name__)
+        raise ValueError("OpenAI request failed") from exc
 
 
 def extract_openai_output_text(response_data: Any) -> str:
