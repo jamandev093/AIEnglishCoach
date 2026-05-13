@@ -104,3 +104,9 @@ CACHE_PROVIDER = (
     or DEFAULT_CACHE_PROVIDER
 )
 CACHE_TTL_SECONDS = _get_int_env("CACHE_TTL_SECONDS", 86400)
+
+
+# Admin API security
+# Used only by protected backend admin endpoints.
+# Never expose this key to the mobile frontend.
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
