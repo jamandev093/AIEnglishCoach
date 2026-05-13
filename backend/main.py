@@ -2,6 +2,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from coach_service import analyze_speech_file, analyze_text as analyze_text_service
+from content_service import get_confidence_videos, get_reading_listening, get_stories, get_topics
 from schemas import AnalyzeRequest
 from settings import APP_NAME, APP_VERSION
 
@@ -36,6 +37,26 @@ def health_check():
         "status": "healthy",
         "service": APP_NAME,
     }
+
+
+@app.get("/content/stories")
+def content_stories():
+    return get_stories()
+
+
+@app.get("/content/confidence-videos")
+def content_confidence_videos():
+    return get_confidence_videos()
+
+
+@app.get("/content/reading-listening")
+def content_reading_listening():
+    return get_reading_listening()
+
+
+@app.get("/content/topics")
+def content_topics():
+    return get_topics()
 
 
 @app.post("/analyze")
