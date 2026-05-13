@@ -1,0 +1,229 @@
+{
+  "items": [
+    {
+      "id": "story-001",
+      "type": "story",
+      "title": "At the Park",
+      "level": "beginner",
+      "category": "dailyLife",
+      "languageSupport": "both",
+      "prompt": "Look at the picture and describe what the children are doing.",
+      "expectedResponse": "The children are playing in the park.",
+      "sentenceStarters": [
+        "I can see...",
+        "The children are...",
+        "They are playing..."
+      ],
+      "keyWords": [
+        "children",
+        "park",
+        "playing",
+        "happy"
+      ],
+      "mediaUrl": "https://example.com/images/story-park-placeholder.jpg",
+      "isPublished": true,
+      "isPremium": false,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    },
+    {
+      "id": "story-002",
+      "type": "story",
+      "title": "A Rainy Morning",
+      "level": "intermediate",
+      "category": "dailyLife",
+      "languageSupport": "both",
+      "prompt": "Observe the picture and speak a short story about the rainy morning.",
+      "expectedResponse": "It is raining in the morning. A student is walking to school with an umbrella.",
+      "sentenceStarters": [
+        "It is raining...",
+        "A student is walking...",
+        "He is carrying..."
+      ],
+      "keyWords": [
+        "rain",
+        "umbrella",
+        "student",
+        "school"
+      ],
+      "mediaUrl": "https://example.com/images/story-rain-placeholder.jpg",
+      "isPublished": true,
+      "isPremium": false,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    },
+    {
+      "id": "confidence-001",
+      "type": "confidenceVideo",
+      "title": "Reply to a Shopkeeper",
+      "level": "beginner",
+      "category": "shopping",
+      "languageSupport": "both",
+      "prompt": "Watch the short scene and reply politely to the shopkeeper.",
+      "expectedResponse": "I would like to buy this, please.",
+      "sentenceStarters": [
+        "I would like...",
+        "Can I have...",
+        "How much is..."
+      ],
+      "keyWords": [
+        "buy",
+        "please",
+        "price",
+        "shop"
+      ],
+      "mediaUrl": "https://example.com/videos/confidence-shop-placeholder.mp4",
+      "isPublished": true,
+      "isPremium": false,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    },
+    {
+      "id": "confidence-002",
+      "type": "confidenceVideo",
+      "title": "Answer a Teacher",
+      "level": "intermediate",
+      "category": "school",
+      "languageSupport": "both",
+      "prompt": "Watch the classroom scene and answer the teacher confidently.",
+      "expectedResponse": "I think the answer is correct because I checked it again.",
+      "sentenceStarters": [
+        "I think...",
+        "My answer is...",
+        "I checked it..."
+      ],
+      "keyWords": [
+        "teacher",
+        "answer",
+        "classroom",
+        "confident"
+      ],
+      "mediaUrl": "https://example.com/videos/confidence-classroom-placeholder.mp4",
+      "isPublished": true,
+      "isPremium": true,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    },
+    {
+      "id": "reading-listening-001",
+      "type": "readingListening",
+      "title": "Buying Vegetables",
+      "level": "beginner",
+      "category": "market",
+      "languageSupport": "both",
+      "prompt": "Listen to the short paragraph, understand the meaning, then speak one sentence.",
+      "expectedResponse": "I went to the market to buy vegetables.",
+      "sentenceStarters": [
+        "I went to...",
+        "I bought...",
+        "The market was..."
+      ],
+      "keyWords": [
+        "market",
+        "vegetables",
+        "buy",
+        "went"
+      ],
+      "mediaUrl": "https://example.com/audio/market-placeholder.mp3",
+      "isPublished": true,
+      "isPremium": false,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    },
+    {
+      "id": "reading-listening-002",
+      "type": "readingListening",
+      "title": "A Visit to the Doctor",
+      "level": "intermediate",
+      "category": "health",
+      "languageSupport": "both",
+      "prompt": "Read and listen to the situation, then explain why the person visited the doctor.",
+      "expectedResponse": "She visited the doctor because she had a fever and cough.",
+      "sentenceStarters": [
+        "She visited...",
+        "She had...",
+        "The doctor told her..."
+      ],
+      "keyWords": [
+        "doctor",
+        "fever",
+        "cough",
+        "medicine"
+      ],
+      "mediaUrl": "https://example.com/audio/doctor-placeholder.mp3",
+      "isPublished": true,
+      "isPremium": false,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    },
+    {
+      "id": "topic-001",
+      "type": "topic",
+      "title": "At School",
+      "level": "beginner",
+      "category": "school",
+      "languageSupport": "both",
+      "prompt": "Practice a real conversation about school.",
+      "expectedResponse": "I go to school every day.",
+      "sentenceStarters": [
+        "I study...",
+        "My teacher...",
+        "I go to school..."
+      ],
+      "keyWords": [
+        "school",
+        "teacher",
+        "student",
+        "study"
+      ],
+      "mediaUrl": null,
+      "isPublished": true,
+      "isPremium": false,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    },
+    {
+      "id": "topic-002",
+      "type": "topic",
+      "title": "At the Hospital",
+      "level": "intermediate",
+      "category": "health",
+      "languageSupport": "both",
+      "prompt": "Practice a real conversation with a doctor or nurse.",
+      "expectedResponse": "I am not feeling well. I have a fever.",
+      "sentenceStarters": [
+        "I am not feeling...",
+        "I have...",
+        "Can you help me..."
+      ],
+      "keyWords": [
+        "hospital",
+        "doctor",
+        "fever",
+        "medicine"
+      ],
+      "mediaUrl": null,
+      "isPublished": true,
+      "isPremium": true,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    },
+    {
+      "id": "topic-hidden-001",
+      "type": "topic",
+      "title": "Unpublished Test Topic",
+      "level": "beginner",
+      "category": "test",
+      "languageSupport": "both",
+      "prompt": "This item should not appear in public content APIs.",
+      "expectedResponse": null,
+      "sentenceStarters": [],
+      "keyWords": [],
+      "mediaUrl": null,
+      "isPublished": false,
+      "isPremium": false,
+      "createdAt": "2026-05-13T00:00:00Z",
+      "updatedAt": "2026-05-13T00:00:00Z"
+    }
+  ]
+}
