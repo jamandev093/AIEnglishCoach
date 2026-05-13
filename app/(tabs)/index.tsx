@@ -159,13 +159,12 @@ export default function HomeScreen() {
     router.push(route as any);
   };
 
-  const openSpeakingTopic = (topic: TopicItem) => {
-    router.push({
-      pathname: "/topicSpeaking",
-      params: {
-        topic: topic.title,
-      },
-    } as any);
+  const openPracticeTopics = () => {
+    router.push("/conversationTopics" as any);
+  };
+
+  const openSpeakingTopic = (_topic: TopicItem) => {
+    openPracticeTopics();
   };
 
   const renderFeatureIcon = (feature: FeatureCard) => {
@@ -260,7 +259,7 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={styles.topicSectionHeader}
         activeOpacity={0.86}
-        onPress={() => router.push("/topics" as any)}
+        onPress={openPracticeTopics}
       >
         <View style={styles.topicSectionTextBox}>
           <Text style={styles.sectionTitle}>Practice Topics</Text>
