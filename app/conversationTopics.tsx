@@ -14,6 +14,7 @@ import {
   getConversationTopicsContent,
   type ContentItem,
 } from "../src/config/api";
+import { saveSelectedTopic } from "../src/utils/selectedTopicStore";
 
 const ACTION_COLOR = "#8499DC";
 
@@ -118,11 +119,31 @@ export default function ConversationTopicsScreen() {
     };
   }, []);
 
-  const handleTopicPress = (topic: ContentItem) => {
-    Alert.alert(
-      "Topic Selected",
-      `${topic.title}\n\nNext phase will connect this topic to the Speaking page without breaking the current SpeakingScreen.`
-    );
+  const handleTopicPress = async (topic: ContentItem) => {
+    try {
+      await saveSelectedTopic({
+        id: topic.id,
+        title: topic.title,
+        type: "topic",
+        level: topic.level,
+        category: topic.category,
+        languageSupport: topic.languageSupport,
+        prompt: topic.prompt,
+        expectedResponse: topic.expectedResponse ?? null,
+        sentenceStarters: topic.sentenceStarters,
+        keyWords: topic.keyWords,
+        isPremium: topic.isPremium,
+      });
+
+      router.push("/speaking" as any);
+    } catch (error) {
+      console.log("Failed to save selected topic:", error);
+
+      Alert.alert(
+        "Topic Not Saved",
+        "Please try again. The topic could not be prepared for speaking practice."
+      );
+    }
   };
 
   return (
@@ -231,7 +252,7 @@ export default function ConversationTopicsScreen() {
           )}
 
           <View style={styles.cardFooter}>
-            <Text style={styles.footerText}>Tap to prepare this topic</Text>
+            <Text style={styles.footerText}>Tap to start speaking practice</Text>
             <Ionicons name="chevron-forward" size={18} color={ACTION_COLOR} />
           </View>
         </TouchableOpacity>
