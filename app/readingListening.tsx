@@ -14,7 +14,9 @@ import {
 
 import {
   analyzeSentenceWithBackend,
+  getReadingListeningContent,
   type AnalyzeApiResponse,
+  type ContentItem,
 } from "../src/config/api";
 import { addActivity } from "../src/utils/activityHistory";
 
@@ -266,6 +268,92 @@ const stories: StoryItem[] = [
   },
 ];
 
+
+function formatContentCategory(category: string): string {
+  return category
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getReadingEmoji(category: string): string {
+  const normalizedCategory = category.toLowerCase();
+
+  if (normalizedCategory.includes("market")) return "??";
+  if (normalizedCategory.includes("health")) return "??";
+  if (normalizedCategory.includes("school")) return "??";
+  if (normalizedCategory.includes("work")) return "??";
+  if (normalizedCategory.includes("travel")) return "??";
+
+  return "??";
+}
+
+function buildKeyWordsFromContent(words: string[]): KeyWord[] {
+  if (words.length === 0) {
+    return [
+      {
+        word: "listen",
+        hindi: "?????",
+        bengali: "????",
+        english: "hear carefully",
+      },
+      {
+        word: "speak",
+        hindi: "?????",
+        bengali: "???",
+        english: "say something aloud",
+      },
+    ];
+  }
+
+  return words.map((word) => ({
+    word,
+    hindi: word,
+    bengali: word,
+    english: word,
+  }));
+}
+
+function buildReadingStoryFromContent(item: ContentItem): StoryItem {
+  const expectedAnswer =
+    item.expectedResponse ||
+    "I can understand the content and speak one clear sentence.";
+
+  const storyText = item.expectedResponse || item.prompt || expectedAnswer;
+  const topic = formatContentCategory(item.category || "Reading");
+  const title = item.title || "Reading & Listening Practice";
+
+  return {
+    title,
+    topic,
+    pictureEmoji: getReadingEmoji(item.category),
+    pictureTitle: topic,
+    story: storyText,
+    hindiSummary:
+      "?? ?????? ??? ???? ?????, ???? ?????, ??? ?? ???? ????????? ????? ??????",
+    bengaliSummary:
+      "?? ???????? ??? ?????, ???? ?????, ????? ???? ???????? ?????? ????? ?????",
+    englishSummary:
+      "Listen to the content, understand the meaning, then speak one clear English sentence.",
+    keyWords: buildKeyWordsFromContent(item.keyWords),
+    questions: [
+      {
+        question:
+          item.prompt ||
+          "After listening, speak one sentence about this content.",
+        answer: expectedAnswer,
+      },
+    ],
+  };
+}
+
+function buildReadingStoriesFromContent(items: ContentItem[]): StoryItem[] {
+  const backendStories = items.map(buildReadingStoryFromContent);
+
+  return backendStories.length > 0 ? backendStories : stories;
+}
+
+
 function buildDefaultResult(
   story: StoryItem,
   questionIndex: number
@@ -349,7 +437,10 @@ export default function ReadingListeningScreen() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
+  const [readingStories, setReadingStories] = useState<StoryItem[]>(stories);
   const [selectedStory, setSelectedStory] = useState<StoryItem>(stories[0]);
+  const [contentLoading, setContentLoading] = useState(false);
+  const [contentError, setContentError] = useState<string | null>(null);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
@@ -386,6 +477,50 @@ export default function ReadingListeningScreen() {
       loadProfileAndSettings();
     }, [])
   );
+
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadReadingListeningContent = async () => {
+      try {
+        setContentLoading(true);
+        setContentError(null);
+
+        const response = await getReadingListeningContent();
+        const backendStories = buildReadingStoriesFromContent(response.items);
+
+        if (!isMounted) return;
+
+        setReadingStories(backendStories);
+        setSelectedStory(backendStories[0]);
+        setSelectedQuestionIndex(0);
+        setResultData(buildDefaultResult(backendStories[0], 0));
+      } catch (error) {
+        console.log("Reading & Listening content fallback:", error);
+
+        if (!isMounted) return;
+
+        setReadingStories(stories);
+        setSelectedStory(stories[0]);
+        setSelectedQuestionIndex(0);
+        setResultData(buildDefaultResult(stories[0], 0));
+        setContentError(
+          "Using saved Reading & Listening content while backend content loads."
+        );
+      } finally {
+        if (isMounted) {
+          setContentLoading(false);
+        }
+      }
+    };
+
+    loadReadingListeningContent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isRecording) {
@@ -682,6 +817,16 @@ export default function ReadingListeningScreen() {
           <Text style={styles.sectionTitle}>Stories List</Text>
         </View>
 
+        {contentLoading && (
+          <Text style={styles.contentStatusText}>
+            Loading Reading & Listening content from backend...
+          </Text>
+        )}
+
+        {contentError && (
+          <Text style={styles.contentStatusText}>{contentError}</Text>
+        )}
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -689,7 +834,7 @@ export default function ReadingListeningScreen() {
           bounces={false}
           overScrollMode="never"
         >
-          {stories.map((story) => {
+          {readingStories.map((story) => {
             const active = selectedStory.title === story.title;
 
             return (
@@ -1051,6 +1196,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
     color: "#0F172A",
+  },
+
+  contentStatusText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+    fontWeight: "700",
+    marginTop: -4,
+    marginBottom: 10,
   },
 
   storyTabs: {
