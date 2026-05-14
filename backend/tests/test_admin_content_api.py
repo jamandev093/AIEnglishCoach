@@ -132,3 +132,84 @@ def test_admin_content_create_rejects_duplicate_id(monkeypatch, tmp_path):
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Content item with this id already exists."
+
+
+def test_admin_content_update_changes_existing_item(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    updated_item = build_admin_test_item("admin-existing-001")
+    item_data = updated_item.model_dump() if hasattr(updated_item, "model_dump") else updated_item.dict()
+    item_data["title"] = "Updated Admin Topic"
+    item_data["prompt"] = "This admin topic was updated."
+
+    response = client.put(
+        "/admin/content/admin-existing-001",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json=item_data,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Updated Admin Topic"
+    assert response.json()["prompt"] == "This admin topic was updated."
+
+
+def test_admin_content_update_rejects_id_mismatch(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    updated_item = build_admin_test_item("different-id")
+
+    response = client.put(
+        "/admin/content/admin-existing-001",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json=updated_item.model_dump() if hasattr(updated_item, "model_dump") else updated_item.dict(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Content id in path and body must match."
+
+
+def test_admin_content_update_returns_404_for_missing_item(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    updated_item = build_admin_test_item("missing-item")
+
+    response = client.put(
+        "/admin/content/missing-item",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json=updated_item.model_dump() if hasattr(updated_item, "model_dump") else updated_item.dict(),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Content item not found."
+
+
+def test_admin_content_unpublish_and_publish(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    unpublish_response = client.post(
+        "/admin/content/admin-existing-001/unpublish",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert unpublish_response.status_code == 200
+    assert unpublish_response.json()["isPublished"] is False
+
+    publish_response = client.post(
+        "/admin/content/admin-existing-001/publish",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert publish_response.status_code == 200
+    assert publish_response.json()["isPublished"] is True
+
+
+def test_admin_content_publish_returns_404_for_missing_item(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    response = client.post(
+        "/admin/content/missing-item/publish",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Content item not found."

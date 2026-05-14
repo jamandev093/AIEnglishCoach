@@ -39,3 +39,50 @@ def create_admin_content_item(item: ContentItem) -> ContentItem:
     save_content_items(items, CONTENT_STORE_PATH)
 
     return item
+
+
+def update_admin_content_item(content_id: str, updated_item: ContentItem) -> ContentItem:
+    """Update one existing content item by id."""
+
+    if updated_item.id != content_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Content id in path and body must match.",
+        )
+
+    items: List[ContentItem] = load_content_items(CONTENT_STORE_PATH)
+
+    for index, existing_item in enumerate(items):
+        if existing_item.id == content_id:
+            items[index] = updated_item
+            save_content_items(items, CONTENT_STORE_PATH)
+            return updated_item
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Content item not found.",
+    )
+
+
+def set_admin_content_publish_status(
+    content_id: str,
+    is_published: bool,
+) -> ContentItem:
+    """Publish or unpublish one content item without deleting it."""
+
+    items: List[ContentItem] = load_content_items(CONTENT_STORE_PATH)
+
+    for index, item in enumerate(items):
+        if item.id == content_id:
+            item_data = item.model_dump() if hasattr(item, "model_dump") else item.dict()
+            item_data["isPublished"] = is_published
+            updated_item = ContentItem(**item_data)
+
+            items[index] = updated_item
+            save_content_items(items, CONTENT_STORE_PATH)
+            return updated_item
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Content item not found.",
+    )
