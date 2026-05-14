@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from coach_service import analyze_speech_file, analyze_text as analyze_text_service
 from admin_content_service import (
     create_admin_content_item,
+    export_admin_content_backup,
     list_admin_content_items,
     set_admin_content_publish_status,
     update_admin_content_item,
@@ -67,6 +68,11 @@ def content_topics():
     return get_topics()
 
 
+
+
+@app.get("/admin/content/export")
+def admin_export_content(_admin_access: bool = Depends(require_admin_key)):
+    return export_admin_content_backup()
 
 
 @app.get("/admin/content")

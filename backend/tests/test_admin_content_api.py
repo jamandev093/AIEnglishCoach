@@ -213,3 +213,31 @@ def test_admin_content_publish_returns_404_for_missing_item(monkeypatch, tmp_pat
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Content item not found."
+
+
+def test_admin_content_export_requires_admin_key(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    response = client.get("/admin/content/export")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Admin key is required."
+
+
+def test_admin_content_export_returns_backup_payload(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    response = client.get(
+        "/admin/content/export",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["success"] is True
+    assert data["count"] == 1
+    assert isinstance(data["items"], list)
+    assert data["items"][0]["id"] == "admin-existing-001"
+    assert data["items"][0]["title"] == "Admin Test Topic"

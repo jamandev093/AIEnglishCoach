@@ -86,3 +86,20 @@ def set_admin_content_publish_status(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Content item not found.",
     )
+
+
+def export_admin_content_backup() -> dict:
+    """Return all content items in backup-friendly JSON format."""
+
+    items = load_content_items(CONTENT_STORE_PATH)
+
+    exported_items = [
+        item.model_dump() if hasattr(item, "model_dump") else item.dict()
+        for item in items
+    ]
+
+    return {
+        "success": True,
+        "count": len(exported_items),
+        "items": exported_items,
+    }
