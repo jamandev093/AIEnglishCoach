@@ -18,3 +18,13 @@ The mobile app is only for learners. Admin tools must never be added inside the 
 ```powershell
 $BASE_URL = "http://127.0.0.1:8000"
 $ADMIN_KEY = "local-admin-test-key"
+
+
+continue with this:
+
+````markdown
+## Render PowerShell Setup
+
+```powershell
+$BASE_URL = "https://aienglishcoach-backend.onrender.com"
+$ADMIN_KEY = "PASTE_REAL_RENDER_ADMIN_KEY_HERE"
