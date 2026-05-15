@@ -86,3 +86,21 @@ def test_user_payment_summary_supports_paid_unpaid_dashboard():
 
     assert summary.paymentStatus == "notPaid"
     assert summary.totalPaidAmount == 0
+
+
+def test_manual_access_update_supports_free_none_restore():
+    from user_schemas import ManualAccessUpdateRequest
+
+    restore_request = ManualAccessUpdateRequest(
+        accessLevel="free",
+        accessSource="none",
+        accessStatus="active",
+        accessExpiresAt=None,
+        courseId=None,
+        courseName=None,
+        manualReason="Restored to original free access.",
+    )
+
+    assert restore_request.accessLevel == "free"
+    assert restore_request.accessSource == "none"
+    assert restore_request.accessStatus == "active"

@@ -125,7 +125,7 @@ class UserDashboardMetrics(BaseModel):
 
 class ManualAccessUpdateRequest(BaseModel):
     accessLevel: AccessLevel = "premium"
-    accessSource: Literal["adminManual", "scholarship", "trial"]
+    accessSource: Literal["none", "adminManual", "scholarship", "trial"]
     accessStatus: AccessStatus = "active"
     accessExpiresAt: Optional[str] = None
     courseId: Optional[str] = None
