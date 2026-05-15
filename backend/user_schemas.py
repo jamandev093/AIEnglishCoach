@@ -143,3 +143,66 @@ class CoursePricing(BaseModel):
     validFrom: str
     validUntil: Optional[str] = None
     updatedAt: str
+
+
+AuthProvider = Literal["phoneOtp", "emailPassword", "google", "manualAdmin"]
+AuthStatus = Literal["pending", "verified", "blocked"]
+PaymentStatus = Literal["notPaid", "paid", "pending", "failed", "refunded"]
+PaymentProvider = Literal["razorpay", "stripe", "manual", "none"]
+
+
+class UserAuthAccount(BaseModel):
+    userId: str
+    phoneNumber: str
+    email: Optional[str] = None
+    authProvider: AuthProvider = "phoneOtp"
+    authStatus: AuthStatus = "pending"
+    phoneVerifiedAt: Optional[str] = None
+    emailVerifiedAt: Optional[str] = None
+    createdAt: str
+    updatedAt: str
+
+
+class UserRegistrationRequest(BaseModel):
+    phoneNumber: str
+    email: Optional[str] = None
+    displayName: Optional[str] = None
+    nativeLanguage: LanguageCode = "other"
+    englishLevel: EnglishLevel = "beginner"
+
+
+class UserLoginRequest(BaseModel):
+    phoneNumber: str
+    otpCode: Optional[str] = None
+
+
+class UserAuthSession(BaseModel):
+    userId: str
+    accessToken: str
+    refreshToken: Optional[str] = None
+    expiresAt: str
+    createdAt: str
+
+
+class PaymentRecord(BaseModel):
+    paymentId: str
+    userId: str
+    courseId: str
+    courseName: str
+    amount: int = Field(ge=0)
+    currency: str = "INR"
+    paymentStatus: PaymentStatus = "pending"
+    paymentProvider: PaymentProvider = "none"
+    providerReferenceId: Optional[str] = None
+    paidAt: Optional[str] = None
+    createdAt: str
+    updatedAt: str
+
+
+class UserPaymentSummary(BaseModel):
+    userId: str
+    paymentStatus: PaymentStatus = "notPaid"
+    totalPaidAmount: int = Field(default=0, ge=0)
+    activeCourseId: Optional[str] = None
+    activeCourseName: Optional[str] = None
+    lastPaymentAt: Optional[str] = None

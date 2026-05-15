@@ -10,6 +10,12 @@ from admin_content_service import (
     update_admin_content_item,
 )
 from admin_security import require_admin_key
+from admin_user_service import (
+    get_admin_user_detail,
+    get_admin_user_metrics,
+    list_admin_users,
+    search_admin_users_by_phone,
+)
 from content_schemas import ContentItem
 from content_service import get_confidence_videos, get_reading_listening, get_stories, get_topics
 from schemas import AnalyzeRequest
@@ -68,6 +74,34 @@ def content_topics():
     return get_topics()
 
 
+
+
+
+
+@app.get("/admin/users")
+def admin_list_users(_admin_access: bool = Depends(require_admin_key)):
+    return list_admin_users()
+
+
+@app.get("/admin/users/search")
+def admin_search_users_by_phone(
+    phone: str,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return search_admin_users_by_phone(phone)
+
+
+@app.get("/admin/users/metrics")
+def admin_get_user_metrics(_admin_access: bool = Depends(require_admin_key)):
+    return get_admin_user_metrics()
+
+
+@app.get("/admin/users/{user_id}")
+def admin_get_user_detail(
+    user_id: str,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return get_admin_user_detail(user_id)
 
 
 @app.get("/admin/content/export")
