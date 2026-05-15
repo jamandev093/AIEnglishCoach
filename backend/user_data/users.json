@@ -1,0 +1,133 @@
+{
+  "users": [
+    {
+      "profile": {
+        "id": "user-001",
+        "phoneNumber": "+919876543210",
+        "email": null,
+        "displayName": "Paid Student",
+        "nativeLanguage": "hindi",
+        "englishLevel": "beginner",
+        "createdAt": "2026-05-15T00:00:00Z",
+        "updatedAt": "2026-05-15T00:00:00Z",
+        "lastActiveAt": "2026-05-15T00:00:00Z",
+        "isActive": true
+      },
+      "access": {
+        "accessLevel": "premium",
+        "accessSource": "payment",
+        "accessStatus": "active",
+        "accessExpiresAt": "2026-06-15T00:00:00Z",
+        "courseId": "premium-speaking-v1",
+        "courseName": "Premium Speaking Course",
+        "manualReason": null,
+        "grantedByAdminId": null,
+        "updatedAt": "2026-05-15T00:00:00Z"
+      },
+      "performance": {
+        "userId": "user-001",
+        "confidenceScore": 72,
+        "fluencyScore": 68,
+        "pronunciationScore": 70,
+        "grammarScore": 66,
+        "speakingPracticeCount": 22,
+        "topicsPracticed": 5,
+        "storiesCompleted": 2,
+        "readingListeningCompleted": 2,
+        "confidenceMissionsCompleted": 3,
+        "totalPracticeMinutes": 120,
+        "lastPracticeAt": "2026-05-15T00:00:00Z",
+        "repeatedMistakes": ["missing to", "wrong tense"],
+        "updatedAt": "2026-05-15T00:00:00Z"
+      },
+      "activityStatus": "currentlyActive",
+      "adminNotes": []
+    },
+    {
+      "profile": {
+        "id": "user-002",
+        "phoneNumber": "+919876543211",
+        "email": null,
+        "displayName": "Free Student",
+        "nativeLanguage": "bengali",
+        "englishLevel": "beginner",
+        "createdAt": "2026-05-15T00:00:00Z",
+        "updatedAt": "2026-05-15T00:00:00Z",
+        "lastActiveAt": "2026-05-10T00:00:00Z",
+        "isActive": true
+      },
+      "access": {
+        "accessLevel": "free",
+        "accessSource": "none",
+        "accessStatus": "active",
+        "accessExpiresAt": null,
+        "courseId": null,
+        "courseName": null,
+        "manualReason": null,
+        "grantedByAdminId": null,
+        "updatedAt": "2026-05-15T00:00:00Z"
+      },
+      "performance": {
+        "userId": "user-002",
+        "confidenceScore": 35,
+        "fluencyScore": 31,
+        "pronunciationScore": 40,
+        "grammarScore": 36,
+        "speakingPracticeCount": 1,
+        "topicsPracticed": 0,
+        "storiesCompleted": 0,
+        "readingListeningCompleted": 0,
+        "confidenceMissionsCompleted": 0,
+        "totalPracticeMinutes": 5,
+        "lastPracticeAt": "2026-05-10T00:00:00Z",
+        "repeatedMistakes": [],
+        "updatedAt": "2026-05-15T00:00:00Z"
+      },
+      "activityStatus": "nonSerious",
+      "adminNotes": []
+    },
+    {
+      "profile": {
+        "id": "user-003",
+        "phoneNumber": "+919876543212",
+        "email": null,
+        "displayName": "Scholarship Student",
+        "nativeLanguage": "hindi",
+        "englishLevel": "intermediate",
+        "createdAt": "2026-05-15T00:00:00Z",
+        "updatedAt": "2026-05-15T00:00:00Z",
+        "lastActiveAt": "2026-05-14T00:00:00Z",
+        "isActive": true
+      },
+      "access": {
+        "accessLevel": "premium",
+        "accessSource": "scholarship",
+        "accessStatus": "active",
+        "accessExpiresAt": "2026-08-15T00:00:00Z",
+        "courseId": "premium-speaking-v1",
+        "courseName": "Premium Speaking Course",
+        "manualReason": "Poor-student free access",
+        "grantedByAdminId": "admin-001",
+        "updatedAt": "2026-05-15T00:00:00Z"
+      },
+      "performance": {
+        "userId": "user-003",
+        "confidenceScore": 60,
+        "fluencyScore": 58,
+        "pronunciationScore": 62,
+        "grammarScore": 59,
+        "speakingPracticeCount": 12,
+        "topicsPracticed": 3,
+        "storiesCompleted": 1,
+        "readingListeningCompleted": 1,
+        "confidenceMissionsCompleted": 2,
+        "totalPracticeMinutes": 80,
+        "lastPracticeAt": "2026-05-14T00:00:00Z",
+        "repeatedMistakes": ["article missing"],
+        "updatedAt": "2026-05-15T00:00:00Z"
+      },
+      "activityStatus": "activeToday",
+      "adminNotes": ["Scholarship granted by owner."]
+    }
+  ]
+}
