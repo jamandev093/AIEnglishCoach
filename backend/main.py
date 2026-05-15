@@ -15,8 +15,11 @@ from admin_user_service import (
     get_admin_user_metrics,
     list_admin_users,
     search_admin_users_by_phone,
+    set_admin_user_access_status,
+    update_admin_user_access,
 )
 from content_schemas import ContentItem
+from user_schemas import ManualAccessUpdateRequest
 from content_service import get_confidence_videos, get_reading_listening, get_stories, get_topics
 from schemas import AnalyzeRequest
 from settings import APP_NAME, APP_VERSION
@@ -94,6 +97,31 @@ def admin_search_users_by_phone(
 @app.get("/admin/users/metrics")
 def admin_get_user_metrics(_admin_access: bool = Depends(require_admin_key)):
     return get_admin_user_metrics()
+
+
+@app.put("/admin/users/{user_id}/access")
+def admin_update_user_access(
+    user_id: str,
+    access_update: ManualAccessUpdateRequest,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return update_admin_user_access(user_id, access_update)
+
+
+@app.post("/admin/users/{user_id}/access/revoke")
+def admin_revoke_user_access(
+    user_id: str,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return set_admin_user_access_status(user_id, "revoked")
+
+
+@app.post("/admin/users/{user_id}/access/expire")
+def admin_expire_user_access(
+    user_id: str,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return set_admin_user_access_status(user_id, "expired")
 
 
 @app.get("/admin/users/{user_id}")

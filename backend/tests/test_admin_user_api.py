@@ -205,3 +205,122 @@ def test_admin_user_detail_returns_404_for_missing_user(monkeypatch, tmp_path):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found."
+
+
+def test_admin_user_access_update_grants_manual_premium(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.put(
+        "/admin/users/user-free-001/access",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={
+            "accessLevel": "premium",
+            "accessSource": "adminManual",
+            "accessStatus": "active",
+            "accessExpiresAt": None,
+            "courseId": "premium-speaking-v1",
+            "courseName": "Premium Speaking Course",
+            "manualReason": "Owner activated premium manually.",
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["profile"]["id"] == "user-free-001"
+    assert data["access"]["accessLevel"] == "premium"
+    assert data["access"]["accessSource"] == "adminManual"
+    assert data["access"]["accessStatus"] == "active"
+    assert data["access"]["manualReason"] == "Owner activated premium manually."
+
+
+def test_admin_user_access_update_grants_scholarship_free_access(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.put(
+        "/admin/users/user-free-001/access",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={
+            "accessLevel": "premium",
+            "accessSource": "scholarship",
+            "accessStatus": "active",
+            "accessExpiresAt": "2026-08-15T00:00:00Z",
+            "courseId": "premium-speaking-v1",
+            "courseName": "Premium Speaking Course",
+            "manualReason": "Poor-student free access.",
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["access"]["accessSource"] == "scholarship"
+    assert data["access"]["accessExpiresAt"] == "2026-08-15T00:00:00Z"
+    assert data["access"]["manualReason"] == "Poor-student free access."
+
+
+def test_admin_user_access_update_requires_admin_key(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.put(
+        "/admin/users/user-free-001/access",
+        json={
+            "accessLevel": "premium",
+            "accessSource": "adminManual",
+            "accessStatus": "active",
+            "manualReason": "Owner activated premium manually.",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Admin key is required."
+
+
+def test_admin_user_access_update_returns_404_for_missing_user(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.put(
+        "/admin/users/missing-user/access",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={
+            "accessLevel": "premium",
+            "accessSource": "adminManual",
+            "accessStatus": "active",
+            "manualReason": "Owner activated premium manually.",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found."
+
+
+def test_admin_user_access_revoke_and_expire(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    revoke_response = client.post(
+        "/admin/users/user-paid-001/access/revoke",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert revoke_response.status_code == 200
+    assert revoke_response.json()["access"]["accessStatus"] == "revoked"
+
+    expire_response = client.post(
+        "/admin/users/user-paid-001/access/expire",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert expire_response.status_code == 200
+    assert expire_response.json()["access"]["accessStatus"] == "expired"
+
+
+def test_admin_user_access_revoke_returns_404_for_missing_user(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.post(
+        "/admin/users/missing-user/access/revoke",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found."
