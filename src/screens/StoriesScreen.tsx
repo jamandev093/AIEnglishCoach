@@ -19,6 +19,11 @@ import {
   type AnalyzeApiResponse,
   type ContentItem,
 } from "../config/api";
+import PremiumLockedModal from "../components/PremiumLockedModal";
+import {
+  DEFAULT_LOCAL_USER_ACCESS,
+  canAccessContent,
+} from "../utils/accessControl";
 import { addActivity } from "../utils/activityHistory";
 
 import {
@@ -418,6 +423,13 @@ export default function StoriesScreen() {
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [premiumModalTitle, setPremiumModalTitle] = useState(
+    "AI Story Feedback is Premium"
+  );
+  const [premiumModalMessage, setPremiumModalMessage] = useState(
+    "AI correction, teacher explanation, and smart suggestions are premium coaching features. Payment and account access will be added soon. Continue free story practice for now."
+  );
   const [resultData, setResultData] = useState<StoryResultData>(
     buildDefaultResult(storyTasks[0])
   );
@@ -689,6 +701,24 @@ export default function StoriesScreen() {
     }
 
     if (practiceState === "recording") {
+      const accessDecision = canAccessContent(
+        {
+          isPremium: true,
+          title: "AI Story Feedback",
+        },
+        DEFAULT_LOCAL_USER_ACCESS
+      );
+
+      if (!accessDecision.allowed) {
+        setPracticeState("idle");
+        setPremiumModalTitle("AI Story Feedback is Premium");
+        setPremiumModalMessage(
+          "AI correction, teacher explanation, and smart suggestions are premium coaching features. Payment and account access will be added soon. Continue free story practice for now."
+        );
+        setPremiumModalVisible(true);
+        return;
+      }
+
       await stopAndAnalyzeStory();
       return;
     }
@@ -966,6 +996,13 @@ export default function StoriesScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <PremiumLockedModal
+        visible={premiumModalVisible}
+        title={premiumModalTitle}
+        message={premiumModalMessage}
+        onClose={() => setPremiumModalVisible(false)}
+      />
 
       <Modal
         visible={showResultPopup}
