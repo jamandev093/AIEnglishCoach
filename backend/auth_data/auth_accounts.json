@@ -1,0 +1,38 @@
+[
+  {
+    "id": "auth-001",
+    "userId": "user-001",
+    "phoneNumber": "9876543210",
+    "email": null,
+    "displayName": "Paid Student",
+    "authProvider": "phoneOtp",
+    "accountStatus": "active",
+    "createdAt": "2026-05-16T00:00:00Z",
+    "updatedAt": "2026-05-16T00:00:00Z",
+    "lastLoginAt": null
+  },
+  {
+    "id": "auth-002",
+    "userId": "user-002",
+    "phoneNumber": "9123456780",
+    "email": null,
+    "displayName": "Free Student",
+    "authProvider": "phoneOtp",
+    "accountStatus": "active",
+    "createdAt": "2026-05-16T00:00:00Z",
+    "updatedAt": "2026-05-16T00:00:00Z",
+    "lastLoginAt": null
+  },
+  {
+    "id": "auth-003",
+    "userId": "user-003",
+    "phoneNumber": "9000032120",
+    "email": null,
+    "displayName": "Scholarship Student",
+    "authProvider": "phoneOtp",
+    "accountStatus": "active",
+    "createdAt": "2026-05-16T00:00:00Z",
+    "updatedAt": "2026-05-16T00:00:00Z",
+    "lastLoginAt": null
+  }
+]\n
