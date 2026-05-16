@@ -18,6 +18,11 @@ import {
   type AnalyzeApiResponse,
   type ContentItem,
 } from "../src/config/api";
+import PremiumLockedModal from "../src/components/PremiumLockedModal";
+import {
+  DEFAULT_LOCAL_USER_ACCESS,
+  canAccessContent,
+} from "../src/utils/accessControl";
 import { addActivity } from "../src/utils/activityHistory";
 
 import {
@@ -445,6 +450,13 @@ export default function ReadingListeningScreen() {
   const [practiceState, setPracticeState] = useState<PracticeState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [premiumModalTitle, setPremiumModalTitle] = useState(
+    "AI Reading Feedback is Premium"
+  );
+  const [premiumModalMessage, setPremiumModalMessage] = useState(
+    "AI speaking correction, comprehension checking, and personalized explanation are premium coaching features. Payment and account access will be added soon. Continue free reading and listening practice for now."
+  );
   const [resultData, setResultData] = useState<ResultData>(
     buildDefaultResult(stories[0], 0)
   );
@@ -753,6 +765,24 @@ export default function ReadingListeningScreen() {
     }
 
     if (practiceState === "recording") {
+      const accessDecision = canAccessContent(
+        {
+          isPremium: true,
+          title: "AI Reading Feedback",
+        },
+        DEFAULT_LOCAL_USER_ACCESS
+      );
+
+      if (!accessDecision.allowed) {
+        setPracticeState("idle");
+        setPremiumModalTitle("AI Reading Feedback is Premium");
+        setPremiumModalMessage(
+          "AI speaking correction, comprehension checking, and personalized explanation are premium coaching features. Payment and account access will be added soon. Continue free reading and listening practice for now."
+        );
+        setPremiumModalVisible(true);
+        return;
+      }
+
       const simulatedUserAnswer = selectedQuestion.answer;
 
       await checkAnswerWithBackend(simulatedUserAnswer);
@@ -1009,6 +1039,13 @@ export default function ReadingListeningScreen() {
           )}
         </View>
       </ScrollView>
+
+      <PremiumLockedModal
+        visible={premiumModalVisible}
+        title={premiumModalTitle}
+        message={premiumModalMessage}
+        onClose={() => setPremiumModalVisible(false)}
+      />
 
       <Modal
         visible={showResultPopup}
