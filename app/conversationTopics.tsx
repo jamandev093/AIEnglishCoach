@@ -14,6 +14,14 @@ import {
   getConversationTopicsContent,
   type ContentItem,
 } from "../src/config/api";
+import PremiumLockedModal from "../src/components/PremiumLockedModal";
+import {
+  DEFAULT_LOCAL_USER_ACCESS,
+  canAccessContent,
+  getAccessBadgeLabel,
+  getPremiumLockMessage,
+  getPremiumLockTitle,
+} from "../src/utils/accessControl";
 import { saveSelectedTopic } from "../src/utils/selectedTopicStore";
 
 const ACTION_COLOR = "#8499DC";
@@ -84,6 +92,11 @@ export default function ConversationTopicsScreen() {
   const [topics, setTopics] = useState<ContentItem[]>(fallbackTopics);
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [premiumModalTitle, setPremiumModalTitle] = useState("Premium Practice");
+  const [premiumModalMessage, setPremiumModalMessage] = useState(
+    "This lesson is part of Premium. Payment and account access will be added soon. For now, continue with free practice."
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -120,6 +133,34 @@ export default function ConversationTopicsScreen() {
   }, []);
 
   const handleTopicPress = async (topic: ContentItem) => {
+    const accessDecision = canAccessContent(
+      {
+        isPremium: topic.isPremium,
+        title: topic.title,
+      },
+      DEFAULT_LOCAL_USER_ACCESS
+    );
+
+    if (!accessDecision.allowed) {
+      setPremiumModalTitle(
+        getPremiumLockTitle({
+          isPremium: topic.isPremium,
+          title: topic.title,
+        })
+      );
+      setPremiumModalMessage(
+        getPremiumLockMessage(
+          {
+            isPremium: topic.isPremium,
+            title: topic.title,
+          },
+          DEFAULT_LOCAL_USER_ACCESS
+        )
+      );
+      setPremiumModalVisible(true);
+      return;
+    }
+
     try {
       await saveSelectedTopic({
         id: topic.id,
@@ -252,11 +293,22 @@ export default function ConversationTopicsScreen() {
           )}
 
           <View style={styles.cardFooter}>
-            <Text style={styles.footerText}>Tap to start speaking practice</Text>
+            <Text style={styles.footerText}>
+                  {topic.isPremium
+                    ? getAccessBadgeLabel(topic, DEFAULT_LOCAL_USER_ACCESS)
+                    : "Tap to start speaking practice"}
+                </Text>
             <Ionicons name="chevron-forward" size={18} color={ACTION_COLOR} />
           </View>
         </TouchableOpacity>
       ))}
+
+      <PremiumLockedModal
+        visible={premiumModalVisible}
+        title={premiumModalTitle}
+        message={premiumModalMessage}
+        onClose={() => setPremiumModalVisible(false)}
+      />
     </ScrollView>
   );
 }
