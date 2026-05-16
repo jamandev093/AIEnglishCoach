@@ -22,7 +22,14 @@ export default function TabsLayout() {
           backgroundColor: "#FFFFFF",
         },
         headerShadowVisible: false,
-        headerLeft: () => <ProfileHeaderButton />,
+        headerLeft: () => (
+          <TouchableOpacity
+            onPress={() => router.push("/account" as any)}
+            activeOpacity={0.85}
+          >
+            <ProfileHeaderButton />
+          </TouchableOpacity>
+        ),
         headerRight: () => (
           <TouchableOpacity
             style={styles.settingsButton}
