@@ -19,6 +19,11 @@ import {
   type AnalyzeApiResponse,
   type ContentItem,
 } from "../src/config/api";
+import PremiumLockedModal from "../src/components/PremiumLockedModal";
+import {
+  DEFAULT_LOCAL_USER_ACCESS,
+  canAccessContent,
+} from "../src/utils/accessControl";
 import { addActivity } from "../src/utils/activityHistory";
 
 type MissionState = "idle" | "watching" | "ready" | "recording" | "completed";
@@ -286,6 +291,13 @@ export default function ConfidenceBuildingScreen() {
   const [missionState, setMissionState] = useState<MissionState>("idle");
   const [repeatState, setRepeatState] = useState<RepeatState>("idle");
   const [showResultPopup, setShowResultPopup] = useState(false);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [premiumModalTitle, setPremiumModalTitle] = useState(
+    "AI Confidence Feedback is Premium"
+  );
+  const [premiumModalMessage, setPremiumModalMessage] = useState(
+    "AI response analysis, confidence scoring, and improvement coaching are premium features. Payment and account access will be added soon. Continue free confidence practice for now."
+  );
   const [userAnswer, setUserAnswer] = useState("");
   const [resultData, setResultData] = useState<ConfidenceResult | null>(null);
 
@@ -530,6 +542,24 @@ export default function ConfidenceBuildingScreen() {
     }
 
     if (missionState === "recording") {
+      const accessDecision = canAccessContent(
+        {
+          isPremium: true,
+          title: "AI Confidence Feedback",
+        },
+        DEFAULT_LOCAL_USER_ACCESS
+      );
+
+      if (!accessDecision.allowed) {
+        setMissionState("idle");
+        setPremiumModalTitle("AI Confidence Feedback is Premium");
+        setPremiumModalMessage(
+          "AI response analysis, confidence scoring, and improvement coaching are premium features. Payment and account access will be added soon. Continue free confidence practice for now."
+        );
+        setPremiumModalVisible(true);
+        return;
+      }
+
       const simulatedAnswer = selectedMission.userSample;
 
       setUserAnswer(simulatedAnswer);
@@ -867,6 +897,13 @@ export default function ConfidenceBuildingScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <PremiumLockedModal
+        visible={premiumModalVisible}
+        title={premiumModalTitle}
+        message={premiumModalMessage}
+        onClose={() => setPremiumModalVisible(false)}
+      />
 
       <Modal
         visible={showResultPopup}
