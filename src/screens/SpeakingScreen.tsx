@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as Speech from "expo-speech";
@@ -5,6 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  BackHandler,
   Modal,
   ScrollView,
   StyleSheet,
@@ -232,12 +234,33 @@ function mapBackendResult(
   };
 }
 
-export default function SpeakingScreen() {
+type SpeakingScreenProps = {
+  fromTopics?: boolean;
+};
+
+export default function SpeakingScreen({ fromTopics = false }: SpeakingScreenProps) {
+
   const [mode, setMode] = useState<SpeakingMode>("idle");
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("idle");
   const [selectedTopic, setSelectedTopic] = useState<SelectedTopicData | null>(
     null
   );
+
+  useEffect(() => {
+    if (!fromTopics) {
+      return undefined;
+    }
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        router.push("/conversationTopics" as any);
+        return true;
+      }
+    );
+
+    return () => subscription.remove();
+  }, [fromTopics]);
   const [selectedSentence, setSelectedSentence] = useState<SuggestedSentence>(
     suggestedSentences[0]
   );

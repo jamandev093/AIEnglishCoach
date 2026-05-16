@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  BackHandler,
   ScrollView,
   StyleSheet,
   Text,
@@ -99,6 +100,18 @@ export default function ConversationTopicsScreen() {
   );
 
   useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        router.push("/" as any);
+        return true;
+      }
+    );
+
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
 
     const loadTopics = async () => {
@@ -176,7 +189,10 @@ export default function ConversationTopicsScreen() {
         isPremium: topic.isPremium,
       });
 
-      router.push("/speaking" as any);
+      router.push({
+        pathname: "/speaking",
+        params: { from: "topics" },
+      } as any);
     } catch (error) {
       console.log("Failed to save selected topic:", error);
 
@@ -196,7 +212,7 @@ export default function ConversationTopicsScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.push("/" as any)}
           activeOpacity={0.85}
         >
           <Ionicons name="arrow-back" size={22} color="#0F172A" />
