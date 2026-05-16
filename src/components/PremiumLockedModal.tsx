@@ -1,6 +1,7 @@
 ﻿import React from "react";
 import {
   Modal,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -30,10 +31,14 @@ export default function PremiumLockedModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
           <View style={styles.iconCircle}>
-            <Ionicons name="lock-closed-outline" size={30} color={ACTION_COLOR} />
+            <Ionicons
+              name="lock-closed-outline"
+              size={30}
+              color={ACTION_COLOR}
+            />
           </View>
 
           <Text style={styles.title}>{title}</Text>
@@ -55,8 +60,8 @@ export default function PremiumLockedModal({
           >
             <Text style={styles.secondaryButtonText}>Maybe Later</Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
