@@ -200,3 +200,29 @@ async def analyze_speech(
     except Exception as error:
         print("Speech analyze error:", error)
         raise HTTPException(status_code=500, detail="Speech analyze failed")
+
+# Phase 13B mock OTP auth endpoint foundation
+# This is mock-only. Do not use this as production OTP security.
+from fastapi import HTTPException
+
+from auth_schemas import OtpRequest, OtpVerificationRequest
+from auth_service import request_mock_otp, verify_mock_otp
+
+
+@app.post("/auth/request-otp")
+def auth_request_otp(request: OtpRequest):
+    return request_mock_otp(request)
+
+
+@app.post("/auth/verify-otp")
+def auth_verify_otp(request: OtpVerificationRequest):
+    result = verify_mock_otp(request)
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=int(result.get("statusCode", 400)),
+            detail=result.get("message", "OTP verification failed."),
+        )
+
+    return result
+

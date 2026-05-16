@@ -31,7 +31,7 @@ def load_auth_accounts(path: Path | str = AUTH_ACCOUNT_STORE_PATH) -> list[AuthA
     if not store_path.exists():
         return []
 
-    raw_text = store_path.read_text(encoding="utf-8").strip()
+    raw_text = store_path.read_text(encoding="utf-8-sig").strip()
 
     if not raw_text:
         return []
