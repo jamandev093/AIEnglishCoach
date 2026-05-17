@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from coach_service import analyze_speech_file, analyze_text as analyze_text_service
@@ -23,6 +23,7 @@ from content_schemas import ContentItem
 from user_schemas import ManualAccessUpdateRequest
 from content_service import get_confidence_videos, get_reading_listening, get_stories, get_topics
 from schemas import AnalyzeRequest
+from me_service import get_me_access_by_phone
 from settings import APP_NAME, APP_VERSION
 
 
@@ -56,6 +57,19 @@ def health_check():
         "status": "healthy",
         "service": APP_NAME,
     }
+
+
+
+
+@app.get("/me/access")
+def me_access(phone: str = Query(...)):
+    """Return mobile account/access state.
+
+    Temporary foundation uses phone query.
+    Later this should use real authenticated session/JWT.
+    """
+
+    return get_me_access_by_phone(phone)
 
 
 @app.get("/content/stories")
