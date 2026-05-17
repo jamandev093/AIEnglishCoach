@@ -43,7 +43,7 @@ async function readErrorMessage(response: Response): Promise<string> {
       return data.message;
     }
   } catch {
-    // Ignore JSON parsing errors and use fallback message below.
+    // Use fallback below.
   }
 
   if (response.status === 401 || response.status === 403) {
