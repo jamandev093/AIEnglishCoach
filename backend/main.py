@@ -7,6 +7,8 @@ from admin_content_service import (
     export_admin_content_backup,
     list_admin_content_items,
     set_admin_content_publish_status,
+    get_admin_content_item,
+    archive_admin_content_item,
     update_admin_content_item,
 )
 from admin_security import require_admin_key
@@ -172,6 +174,22 @@ def admin_create_content(
 ):
     return create_admin_content_item(item)
 
+
+@app.get("/admin/content/{content_id}", response_model=ContentItem)
+def admin_get_content_detail(
+    content_id: str,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return get_admin_content_item(content_id)
+
+
+@app.post("/admin/content/{content_id}/archive", response_model=ContentItem)
+def admin_archive_content(
+    content_id: str,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return archive_admin_content_item(content_id)
+
 @app.put("/admin/content/{content_id}")
 def admin_update_content(
     content_id: str,
@@ -248,4 +266,6 @@ def auth_verify_otp(request: OtpVerificationRequest):
         )
 
     return result
+
+
 

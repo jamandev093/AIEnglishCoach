@@ -241,3 +241,75 @@ def test_admin_content_export_returns_backup_payload(monkeypatch, tmp_path):
     assert isinstance(data["items"], list)
     assert data["items"][0]["id"] == "admin-existing-001"
     assert data["items"][0]["title"] == "Admin Test Topic"
+
+
+def test_admin_can_get_content_detail(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    item = build_admin_test_item("detail-test-1")
+    item_payload = item.model_dump() if hasattr(item, "model_dump") else item.dict()
+
+    create_response = client.post(
+        "/admin/content",
+        json=item_payload,
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert create_response.status_code == 200
+
+    response = client.get(
+        "/admin/content/detail-test-1",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "detail-test-1"
+
+
+def test_admin_content_detail_missing_item_returns_404(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    response = client.get(
+        "/admin/content/missing-content-id",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Content item not found."
+
+
+def test_admin_can_archive_content_item(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    item = build_admin_test_item("archive-test-1")
+    item_payload = item.model_dump() if hasattr(item, "model_dump") else item.dict()
+
+    create_response = client.post(
+        "/admin/content",
+        json=item_payload,
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert create_response.status_code == 200
+
+    response = client.post(
+        "/admin/content/archive-test-1/archive",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "archive-test-1"
+    assert response.json()["isPublished"] is False
+
+
+def test_admin_archive_missing_content_item_returns_404(monkeypatch, tmp_path):
+    setup_admin_test_store(monkeypatch, tmp_path)
+
+    response = client.post(
+        "/admin/content/missing-content-id/archive",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Content item not found."
+
