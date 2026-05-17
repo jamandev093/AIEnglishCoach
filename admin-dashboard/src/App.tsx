@@ -759,19 +759,18 @@ function App() {
   return (
     <main className="dashboard-shell">
       <aside className="sidebar">
-        <div className="admin-account-card">
-          <p className="eyebrow">Admin Account</p>
-          <h1>Admin</h1>
+        <div className="admin-account-card compact-admin-account">
+          <div className="admin-account-top">
+            <div>
+              <p className="eyebrow">Admin Account</p>
+              <h1>Admin</h1>
+            </div>
+            <span className="admin-key-pill">Key Saved</span>
+          </div>
 
-          <div className="admin-account-list">
-            <span>Key Saved</span>
-            <strong>{maskedAdminKey}</strong>
-
-            <span>Backend</span>
-            <strong>Render</strong>
-
-            <span>Mode</span>
-            <strong>Development</strong>
+          <div className="admin-account-mini-row">
+            <span>Render</span>
+            <span>Development</span>
           </div>
         </div>
 
@@ -818,3 +817,4 @@ function App() {
 }
 
 export default App;
+

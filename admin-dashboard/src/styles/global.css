@@ -87,7 +87,7 @@ button {
 
 .admin-account-card {
   border-radius: 22px;
-  padding: 16px;
+  padding: 8px 10px;
   background: #f6f8ff;
   border: 1px solid rgba(132, 153, 220, 0.26);
 }
@@ -102,7 +102,7 @@ button {
 }
 
 .admin-account-card h1 {
-  font-size: 30px;
+  font-size: 20px;
 }
 
 .auth-card h1 {
@@ -125,19 +125,19 @@ button {
 .admin-account-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 5px;
-  margin-top: 14px;
+  gap: 2px;
+  margin-top: 6px;
 }
 
 .admin-account-list span {
   color: #65708a;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
 }
 
 .admin-account-list strong {
   color: #172033;
-  font-size: 13px;
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 
@@ -576,3 +576,57 @@ button {
     flex-direction: column;
   }
 }
+
+/* Phase 15F-5 polish: compact Admin Account card */
+.compact-admin-account {
+  padding: 8px 10px !important;
+  border-radius: 16px !important;
+}
+
+.admin-account-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compact-admin-account .eyebrow {
+  margin-bottom: 2px !important;
+  font-size: 9px !important;
+  letter-spacing: 0.08em !important;
+}
+
+.compact-admin-account h1 {
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+.admin-key-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: #384a86;
+  background: #eef3ff;
+  border: 1px solid rgba(132, 153, 220, 0.28);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.admin-account-mini-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.admin-account-mini-row span {
+  flex: 1;
+  border-radius: 999px;
+  padding: 4px 6px;
+  color: #65708a;
+  background: #ffffff;
+  border: 1px solid rgba(132, 153, 220, 0.2);
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
