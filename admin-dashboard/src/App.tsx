@@ -724,6 +724,54 @@ function App() {
     );
   }
 
+  function getSelectedContentDescription() {
+    if (selectedContentType === "Stories") {
+      return "Picture observation and user-created story speaking practice content.";
+    }
+
+    if (selectedContentType === "Practice Topics") {
+      return "Manual topic library for real-life conversation scenarios and admin-managed topic content.";
+    }
+
+    if (selectedContentType === "Confidence Videos") {
+      return "Short confidence-building video missions for real-life speaking reactions.";
+    }
+
+    return "Guided comprehension content with picture, English text, native meaning, key words, and Listen/Speak flow.";
+  }
+
+  function getSelectedContentTags() {
+    if (selectedContentType === "Stories") {
+      return "story, picture, speaking";
+    }
+
+    if (selectedContentType === "Practice Topics") {
+      return "topic, conversation, scenario";
+    }
+
+    if (selectedContentType === "Confidence Videos") {
+      return "confidence, video, reaction";
+    }
+
+    return "reading, listening, comprehension";
+  }
+
+  function getSelectedUploadLabel() {
+    if (selectedContentType === "Stories") {
+      return "Create Story";
+    }
+
+    if (selectedContentType === "Practice Topics") {
+      return "Create Practice Topic";
+    }
+
+    if (selectedContentType === "Confidence Videos") {
+      return "Upload Confidence Video";
+    }
+
+    return "Create Reading & Listening";
+  }
+
   function renderContentMetricCard(
     title: string,
     value: number,
@@ -735,7 +783,10 @@ function App() {
           selectedContentType === title ? "active-content-type" : ""
         }`}
         type="button"
-        onClick={() => setSelectedContentType(title)}
+        onClick={() => {
+          setSelectedContentType(title);
+          setActiveContentTab("all");
+        }}
       >
         <span>{title}</span>
         <strong>{value}</strong>
@@ -791,19 +842,99 @@ function App() {
     );
   }
 
+  function renderSelectedContentTypePage() {
+    return (
+      <>
+        <section className="content-internal-page">
+          <div className="content-internal-header">
+            <div>
+              <p className="eyebrow">Content Type</p>
+              <h2>{selectedContentType} Management</h2>
+              <p>{getSelectedContentDescription()}</p>
+            </div>
+
+            <span className="content-type-badge">{selectedContentType}</span>
+          </div>
+
+          <div className="content-type-search-row">
+            <input
+              value={contentSearchInput}
+              onChange={(event) => setContentSearchInput(event.target.value)}
+              placeholder={`Search ${selectedContentType} by title or tags`}
+              type="search"
+            />
+
+            <input
+              value={contentDateFilter}
+              onChange={(event) => setContentDateFilter(event.target.value)}
+              type="date"
+            />
+
+            <button className="small-button primary-small" type="button">
+              Search
+            </button>
+          </div>
+
+          <p className="content-search-note">
+            Search UI is ready for {selectedContentType}. Real content search by
+            title, tags, and publish date will connect after backend list connection.
+          </p>
+        </section>
+
+        <section className="content-scroll-panel">
+          <div className="compact-section-title">
+            <div>
+              <h2>{selectedContentType} Library</h2>
+              <p>
+                Scroll this section to find existing {selectedContentType} content.
+                Real uploaded content will appear here after backend connection.
+              </p>
+            </div>
+          </div>
+
+          <div className="content-scroll-list">
+            {renderContentPlaceholderRow(
+              `${selectedContentType} item 1`,
+              selectedContentType,
+              "Foundation",
+              getSelectedContentTags(),
+              "Later"
+            )}
+            {renderContentPlaceholderRow(
+              `${selectedContentType} item 2`,
+              selectedContentType,
+              "Foundation",
+              getSelectedContentTags(),
+              "Later"
+            )}
+            {renderContentPlaceholderRow(
+              `${selectedContentType} item 3`,
+              selectedContentType,
+              "Foundation",
+              getSelectedContentTags(),
+              "Later"
+            )}
+          </div>
+        </section>
+      </>
+    );
+  }
+
   function renderContentTabPanel() {
     if (activeContentTab === "upload") {
       return (
-        <section className="compact-card">
-          <div className="module-page-heading">
-            <span className="module-code large">UP</span>
+        <section className="content-internal-page">
+          <div className="content-internal-header">
             <div>
-              <h2>Upload / Create</h2>
+              <p className="eyebrow">Upload / Create</p>
+              <h2>{getSelectedUploadLabel()}</h2>
               <p>
-                Future place to manually create Reading & Listening, Stories,
-                Practice Topics, and Confidence Videos.
+                Future place to manually create, save, and prepare {selectedContentType}
+                content. No real upload action is added in this phase.
               </p>
             </div>
+
+            <span className="content-type-badge">{selectedContentType}</span>
           </div>
         </section>
       );
@@ -811,16 +942,28 @@ function App() {
 
     if (activeContentTab === "published") {
       return (
-        <section className="compact-card">
-          <div className="module-page-heading">
-            <span className="module-code large">PB</span>
+        <section className="content-scroll-panel">
+          <div className="content-internal-header">
             <div>
-              <h2>Published Content</h2>
+              <p className="eyebrow">Published</p>
+              <h2>Published {selectedContentType}</h2>
               <p>
-                Published content list will connect here later. No publish
-                action is added in this phase.
+                Published {selectedContentType} content will appear here later.
+                No publish action is added in this phase.
               </p>
             </div>
+
+            <span className="content-type-badge">{selectedContentType}</span>
+          </div>
+
+          <div className="content-scroll-list">
+            {renderContentPlaceholderRow(
+              `Published ${selectedContentType} item`,
+              selectedContentType,
+              "Published foundation",
+              getSelectedContentTags(),
+              "Later"
+            )}
           </div>
         </section>
       );
@@ -828,15 +971,27 @@ function App() {
 
     if (activeContentTab === "saved") {
       return (
-        <section className="compact-card">
-          <div className="module-page-heading">
-            <span className="module-code large">SV</span>
+        <section className="content-scroll-panel">
+          <div className="content-internal-header">
             <div>
-              <h2>Saved Drafts</h2>
+              <p className="eyebrow">Saved Drafts</p>
+              <h2>Saved {selectedContentType} Drafts</h2>
               <p>
-                Saved draft content will appear here later before publishing.
+                Draft {selectedContentType} content will appear here later before publishing.
               </p>
             </div>
+
+            <span className="content-type-badge">{selectedContentType}</span>
+          </div>
+
+          <div className="content-scroll-list">
+            {renderContentPlaceholderRow(
+              `Saved ${selectedContentType} draft`,
+              selectedContentType,
+              "Draft foundation",
+              getSelectedContentTags(),
+              "Later"
+            )}
           </div>
         </section>
       );
@@ -844,79 +999,34 @@ function App() {
 
     if (activeContentTab === "deleted") {
       return (
-        <section className="compact-card">
-          <div className="module-page-heading">
-            <span className="module-code large">AR</span>
+        <section className="content-scroll-panel">
+          <div className="content-internal-header">
             <div>
-              <h2>Deleted / Archived</h2>
+              <p className="eyebrow">Deleted / Archived</p>
+              <h2>Archived {selectedContentType}</h2>
               <p>
-                Safe archive/recovery area. Permanent delete is not added now.
+                Safe archive/recovery area for {selectedContentType}. Permanent delete
+                is not added now.
               </p>
             </div>
+
+            <span className="content-type-badge">{selectedContentType}</span>
+          </div>
+
+          <div className="content-scroll-list">
+            {renderContentPlaceholderRow(
+              `Archived ${selectedContentType} item`,
+              selectedContentType,
+              "Archived foundation",
+              getSelectedContentTags(),
+              "Later"
+            )}
           </div>
         </section>
       );
     }
 
-    return (
-      <section className="compact-card">
-        <div className="compact-section-title">
-          <div>
-            <h2>Content Library</h2>
-            <p>
-              Scroll and find manually managed content by section. Real content
-              list connection comes later.
-            </p>
-          </div>
-        </div>
-
-        <div className="content-section-stack">
-          <div className="content-section-block">
-            <h3>Reading & Listening</h3>
-            {renderContentPlaceholderRow(
-              "Reading lesson title",
-              "Reading & Listening",
-              "Foundation",
-              "listening, reading",
-              "Later"
-            )}
-          </div>
-
-          <div className="content-section-block">
-            <h3>Stories</h3>
-            {renderContentPlaceholderRow(
-              "Story title",
-              "Stories",
-              "Foundation",
-              "story, speaking",
-              "Later"
-            )}
-          </div>
-
-          <div className="content-section-block">
-            <h3>Practice Topics</h3>
-            {renderContentPlaceholderRow(
-              "Practice topic title",
-              "Practice Topics",
-              "Foundation",
-              "topic, conversation",
-              "Later"
-            )}
-          </div>
-
-          <div className="content-section-block">
-            <h3>Confidence Videos</h3>
-            {renderContentPlaceholderRow(
-              "Confidence video title",
-              "Confidence Videos",
-              "Foundation",
-              "confidence, video",
-              "Later"
-            )}
-          </div>
-        </div>
-      </section>
-    );
+    return renderSelectedContentTypePage();
   }
 
   function renderContentPage() {
@@ -937,53 +1047,10 @@ function App() {
           {renderContentTabButton("deleted", "Deleted / Archived")}
         </section>
 
-        <section className="content-search-panel">
-          <div>
-            <h2>Find content</h2>
-            <p>Search by title, tags, content type, and publish date.</p>
-          </div>
-
-          <div className="content-search-grid">
-            <input
-              value={contentSearchInput}
-              onChange={(event) => setContentSearchInput(event.target.value)}
-              placeholder="Search by title or tags"
-              type="search"
-            />
-
-            <select
-              value={contentTypeFilter}
-              onChange={(event) => setContentTypeFilter(event.target.value)}
-            >
-              <option value="all">All Types</option>
-              <option value="readingListening">Reading & Listening</option>
-              <option value="stories">Stories</option>
-              <option value="practiceTopics">Practice Topics</option>
-              <option value="confidenceVideos">Confidence Videos</option>
-            </select>
-
-            <input
-              value={contentDateFilter}
-              onChange={(event) => setContentDateFilter(event.target.value)}
-              type="date"
-            />
-
-            <button className="small-button primary-small" type="button">
-              Search
-            </button>
-          </div>
-
-          <p className="content-search-note">
-            Search UI is ready. Real content filtering will connect after the
-            content list foundation.
-          </p>
-        </section>
-
         {renderContentTabPanel()}
       </>
     );
   }
-
   function renderAiUsagePage() {
     return (
       <>
@@ -1165,3 +1232,4 @@ function App() {
 }
 
 export default App;
+
