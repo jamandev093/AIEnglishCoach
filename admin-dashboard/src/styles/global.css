@@ -46,10 +46,10 @@ button {
 
 .auth-card {
   width: min(560px, 100%);
-  border-radius: 28px;
+  border-radius: 24px;
   background: #ffffff;
-  padding: 44px;
-  box-shadow: 0 24px 70px rgba(39, 69, 130, 0.14);
+  padding: 36px;
+  box-shadow: 0 20px 52px rgba(39, 69, 130, 0.13);
   border: 1px solid rgba(132, 153, 220, 0.28);
 }
 
@@ -68,8 +68,8 @@ button {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 16px;
   background: rgba(255, 255, 255, 0.94);
   border-right: 1px solid rgba(132, 153, 220, 0.24);
   box-shadow: 12px 0 40px rgba(39, 69, 130, 0.08);
@@ -82,14 +82,31 @@ button {
   min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 22px;
+  padding: 20px;
 }
 
 .admin-account-card {
-  border-radius: 22px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(132, 153, 220, 0.26);
+  border-radius: 16px;
   padding: 8px 10px;
   background: #f6f8ff;
-  border: 1px solid rgba(132, 153, 220, 0.26);
+  color: #172033;
+}
+
+.admin-account-button:hover,
+.active-account {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(132, 153, 220, 0.12);
+  border-color: rgba(132, 153, 220, 0.62);
+}
+
+.admin-account-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .admin-account-card h1,
@@ -102,7 +119,7 @@ button {
 }
 
 .admin-account-card h1 {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .auth-card h1 {
@@ -114,31 +131,47 @@ button {
 }
 
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: #8499dc;
   font-weight: 900;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-size: 12px;
+  font-size: 11px;
 }
 
-.admin-account-list {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 2px;
+.admin-account-card .eyebrow {
+  margin-bottom: 2px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.admin-key-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: #384a86;
+  background: #eef3ff;
+  border: 1px solid rgba(132, 153, 220, 0.28);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.admin-account-mini-row {
+  display: flex;
+  gap: 6px;
   margin-top: 6px;
 }
 
-.admin-account-list span {
+.admin-account-mini-row span {
+  flex: 1;
+  border-radius: 999px;
+  padding: 4px 6px;
   color: #65708a;
+  background: #ffffff;
+  border: 1px solid rgba(132, 153, 220, 0.2);
   font-size: 10px;
   font-weight: 800;
-}
-
-.admin-account-list strong {
-  color: #172033;
-  font-size: 11px;
-  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .lead {
@@ -164,8 +197,8 @@ button {
 .phone-search-form input {
   width: 100%;
   border: 1px solid rgba(132, 153, 220, 0.45);
-  border-radius: 16px;
-  padding: 13px 15px;
+  border-radius: 14px;
+  padding: 12px 14px;
   color: #172033;
   background: #f8faff;
   outline: none;
@@ -181,7 +214,8 @@ button {
 .logout-button,
 .nav-button,
 .small-button,
-.top-data-card.clickable-card {
+.top-data-card.clickable-card,
+.workflow-grid button {
   border: 0;
   border-radius: 14px;
   font-weight: 800;
@@ -218,16 +252,9 @@ button {
 .logout-button:hover,
 .nav-button:hover,
 .small-button:hover,
-.top-data-card.clickable-card:hover {
+.top-data-card.clickable-card:hover,
+.workflow-grid button:hover {
   transform: translateY(-1px);
-}
-
-.primary-button:active,
-.logout-button:active,
-.nav-button:active,
-.small-button:active,
-.top-data-card.clickable-card:active {
-  transform: translateY(0);
 }
 
 .error-message {
@@ -254,11 +281,11 @@ button {
 .nav-button {
   width: 100%;
   display: grid;
-  grid-template-columns: 38px 1fr;
+  grid-template-columns: 32px 1fr;
   align-items: center;
   gap: 10px;
   text-align: left;
-  padding: 9px;
+  padding: 7px 9px;
   color: #172033;
   background: #f7f9ff;
   border: 1px solid rgba(132, 153, 220, 0.18);
@@ -268,9 +295,9 @@ button {
 .module-code {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 13px;
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
   color: #172033;
   background: #eef3ff;
   font-size: 12px;
@@ -279,10 +306,10 @@ button {
 }
 
 .module-code.large {
-  width: 52px;
-  height: 52px;
-  border-radius: 18px;
-  font-size: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  font-size: 15px;
 }
 
 .module-code.warning {
@@ -328,10 +355,10 @@ button {
 .compact-card,
 .top-data-row,
 .dashboard-summary-row > .top-data-card {
-  border-radius: 24px;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(132, 153, 220, 0.24);
-  box-shadow: 0 14px 34px rgba(39, 69, 130, 0.09);
+  box-shadow: 0 12px 30px rgba(39, 69, 130, 0.08);
 }
 
 .page-header {
@@ -339,34 +366,34 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 14px;
-  padding: 22px 24px;
+  margin-bottom: 12px;
+  padding: 20px 22px;
 }
 
 .page-header p:last-child {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: #4c5876;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.5;
 }
 
 .compact-card {
-  padding: 20px;
-  margin-bottom: 14px;
+  padding: 18px;
+  margin-bottom: 12px;
 }
 
 .compact-card h2 {
   margin: 0;
   color: #172033;
-  font-size: 24px;
+  font-size: 22px;
   letter-spacing: -0.03em;
 }
 
 .compact-card p {
-  margin: 7px 0 0;
+  margin: 6px 0 0;
   color: #65708a;
-  line-height: 1.55;
-  font-size: 15px;
+  line-height: 1.5;
+  font-size: 14px;
 }
 
 .alert-card {
@@ -377,7 +404,7 @@ button {
 .top-data-row {
   display: grid;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .dashboard-summary-row {
@@ -386,12 +413,12 @@ button {
 
 .top-data-row {
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  padding: 14px;
+  padding: 12px;
 }
 
 .top-data-card {
-  border-radius: 18px;
-  padding: 14px;
+  border-radius: 16px;
+  padding: 12px;
   background: #f6f8ff;
   border: 1px solid rgba(132, 153, 220, 0.22);
   text-align: left;
@@ -407,20 +434,20 @@ button {
   color: #65708a;
   font-size: 12px;
   font-weight: 800;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .top-data-card strong {
   display: block;
   color: #172033;
-  font-size: 26px;
+  font-size: 24px;
   line-height: 1;
   letter-spacing: -0.04em;
 }
 
 .top-data-card small {
   display: block;
-  margin-top: 7px;
+  margin-top: 6px;
   color: #65708a;
   line-height: 1.35;
   font-weight: 650;
@@ -446,7 +473,7 @@ button {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .inline-info-message {
@@ -460,10 +487,12 @@ button {
 }
 
 .detail-grid,
-.panel-grid {
+.panel-grid,
+.account-status-grid,
+.workflow-grid {
   display: grid;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .detail-grid {
@@ -474,9 +503,14 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.account-status-grid,
+.workflow-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .detail-grid div {
-  border-radius: 18px;
-  padding: 14px;
+  border-radius: 16px;
+  padding: 12px;
   background: #f6f8ff;
   border: 1px solid rgba(132, 153, 220, 0.22);
 }
@@ -484,16 +518,32 @@ button {
 .detail-grid strong {
   display: block;
   color: #172033;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.45;
 }
 
+.workflow-grid button {
+  border: 1px solid rgba(132, 153, 220, 0.22);
+  padding: 12px;
+  background: #f6f8ff;
+  color: #172033;
+  text-align: left;
+}
+
+.workflow-grid button span {
+  display: block;
+  margin-top: 5px;
+  color: #65708a;
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .clean-list {
-  margin: 12px 0 0;
+  margin: 10px 0 0;
   padding-left: 20px;
   color: #4c5876;
-  line-height: 1.8;
-  font-size: 15px;
+  line-height: 1.7;
+  font-size: 14px;
   font-weight: 650;
 }
 
@@ -503,8 +553,10 @@ button {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .panel-grid {
-    grid-template-columns: 1fr;
+  .panel-grid,
+  .account-status-grid,
+  .workflow-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -550,8 +602,8 @@ button {
   .page-header,
   .compact-card,
   .top-data-row {
-    padding: 18px;
-    border-radius: 20px;
+    padding: 16px;
+    border-radius: 18px;
   }
 
   .sidebar {
@@ -561,7 +613,9 @@ button {
   .sidebar-nav,
   .dashboard-summary-row,
   .top-data-row,
-  .phone-search-form {
+  .phone-search-form,
+  .account-status-grid,
+  .workflow-grid {
     grid-template-columns: 1fr;
   }
 
@@ -576,70 +630,3 @@ button {
     flex-direction: column;
   }
 }
-
-/* Phase 15F-5 polish: compact Admin Account card */
-.compact-admin-account {
-  padding: 8px 10px !important;
-  border-radius: 16px !important;
-}
-
-.admin-account-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.compact-admin-account .eyebrow {
-  margin-bottom: 2px !important;
-  font-size: 9px !important;
-  letter-spacing: 0.08em !important;
-}
-
-.compact-admin-account h1 {
-  font-size: 18px !important;
-  line-height: 1 !important;
-}
-
-.admin-key-pill {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  padding: 4px 7px;
-  color: #384a86;
-  background: #eef3ff;
-  border: 1px solid rgba(132, 153, 220, 0.28);
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.admin-account-mini-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.admin-account-mini-row span {
-  flex: 1;
-  border-radius: 999px;
-  padding: 4px 6px;
-  color: #65708a;
-  background: #ffffff;
-  border: 1px solid rgba(132, 153, 220, 0.2);
-  font-size: 10px;
-  font-weight: 800;
-  text-align: center;
-}
-
-/* Phase 15F polish: reduce sidebar function card height only */
-.sidebar-nav .nav-button {
-  padding-top: 7px !important;
-  padding-bottom: 7px !important;
-  min-height: 0 !important;
-}
-
-.sidebar-nav .nav-code {
-  width: 32px !important;
-  height: 32px !important;
-  border-radius: 12px !important;
-}
-
