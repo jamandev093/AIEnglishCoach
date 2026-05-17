@@ -103,3 +103,35 @@ def export_admin_content_backup() -> dict:
         "count": len(exported_items),
         "items": exported_items,
     }
+
+def get_admin_content_item(content_id: str) -> ContentItem:
+    items: List[ContentItem] = load_content_items(CONTENT_STORE_PATH)
+
+    for item in items:
+        if item.id == content_id:
+            return item
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Content item not found.",
+    )
+
+
+def archive_admin_content_item(content_id: str) -> ContentItem:
+    items: List[ContentItem] = load_content_items(CONTENT_STORE_PATH)
+
+    for index, item in enumerate(items):
+        if item.id == content_id:
+            item_data = item.model_dump() if hasattr(item, "model_dump") else item.dict()
+            item_data["isPublished"] = False
+            updated_item = ContentItem(**item_data)
+
+            items[index] = updated_item
+            save_content_items(items, CONTENT_STORE_PATH)
+            return updated_item
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Content item not found.",
+    )
+
