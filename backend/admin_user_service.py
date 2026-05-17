@@ -119,3 +119,37 @@ def set_admin_user_access_status(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="User not found.",
     )
+
+
+def restore_admin_user_free_access(user_id: str) -> AdminUserDetail:
+    """Restore one user to normal free active access.
+
+    This is an admin cleanup action for manual premium/scholarship/revoked users.
+    It preserves profile, performance, activity status, and admin notes.
+    """
+
+    users = load_user_records(USER_STORE_PATH)
+
+    for index, user in enumerate(users):
+        if user.profile.id == user_id:
+            restored_access = UserAccess(
+                accessLevel="free",
+                accessSource="none",
+                accessStatus="active",
+                accessExpiresAt=None,
+                courseId=None,
+                courseName=None,
+                manualReason=None,
+                grantedByAdminId=None,
+                updatedAt=user.profile.updatedAt,
+            )
+
+            user.access = restored_access
+            users[index] = user
+            save_user_records(users, USER_STORE_PATH)
+            return user
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="User not found.",
+    )

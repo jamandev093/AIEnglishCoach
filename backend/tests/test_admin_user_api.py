@@ -324,3 +324,77 @@ def test_admin_user_access_revoke_returns_404_for_missing_user(monkeypatch, tmp_
 
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found."
+
+
+def test_admin_user_access_restore_free_resets_premium_user(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.post(
+        "/admin/users/user-paid-001/access/restore-free",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["profile"]["id"] == "user-paid-001"
+    assert data["access"]["accessLevel"] == "free"
+    assert data["access"]["accessSource"] == "none"
+    assert data["access"]["accessStatus"] == "active"
+    assert data["access"]["accessExpiresAt"] is None
+    assert data["access"]["courseId"] is None
+    assert data["access"]["courseName"] is None
+    assert data["access"]["manualReason"] is None
+    assert data["access"]["grantedByAdminId"] is None
+
+
+def test_admin_user_access_restore_free_resets_scholarship_user(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.post(
+        "/admin/users/user-scholarship-001/access/restore-free",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["profile"]["id"] == "user-scholarship-001"
+    assert data["access"]["accessLevel"] == "free"
+    assert data["access"]["accessSource"] == "none"
+    assert data["access"]["accessStatus"] == "active"
+
+
+def test_admin_user_access_restore_free_requires_admin_key(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.post("/admin/users/user-paid-001/access/restore-free")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Admin key is required."
+
+
+def test_admin_user_access_restore_free_rejects_wrong_admin_key(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.post(
+        "/admin/users/user-paid-001/access/restore-free",
+        headers={"X-Admin-Key": "wrong-key"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Invalid admin key."
+
+
+def test_admin_user_access_restore_free_returns_404_for_missing_user(monkeypatch, tmp_path):
+    setup_admin_user_test_store(monkeypatch, tmp_path)
+
+    response = client.post(
+        "/admin/users/missing-user/access/restore-free",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found."

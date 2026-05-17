@@ -16,6 +16,7 @@ from admin_user_service import (
     list_admin_users,
     search_admin_users_by_phone,
     set_admin_user_access_status,
+    restore_admin_user_free_access,
     update_admin_user_access,
 )
 from content_schemas import ContentItem
@@ -122,6 +123,14 @@ def admin_expire_user_access(
     _admin_access: bool = Depends(require_admin_key),
 ):
     return set_admin_user_access_status(user_id, "expired")
+
+
+@app.post("/admin/users/{user_id}/access/restore-free")
+def admin_restore_user_free_access(
+    user_id: str,
+    _admin_access: bool = Depends(require_admin_key),
+):
+    return restore_admin_user_free_access(user_id)
 
 
 @app.get("/admin/users/{user_id}")
