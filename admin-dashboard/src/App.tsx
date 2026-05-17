@@ -13,9 +13,9 @@ type AdminPage =
   | "content"
   | "premium"
   | "aiTasks"
-  | "speakingAnalytics"
-  | "mistakeMemory"
-  | "systemHealth"
+  | "speaking"
+  | "mistakes"
+  | "health"
   | "backup"
   | "settings";
 
@@ -47,15 +47,15 @@ type DashboardMetrics = {
 type NavItem = {
   id: AdminPage;
   label: string;
-  description: string;
   code: string;
 };
 
-type ServiceCard = {
+type ModuleCard = {
+  id: Exclude<AdminPage, "dashboard">;
   title: string;
   code: string;
   description: string;
-  status: "Connected" | "Foundation Ready" | "Coming Next" | "Planned";
+  status: "Ready" | "Next" | "Planned";
 };
 
 type ModuleDetail = {
@@ -68,229 +68,158 @@ type ModuleDetail = {
 };
 
 const navItems: NavItem[] = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    description: "Control center overview",
-    code: "DB",
-  },
+  { id: "dashboard", label: "Dashboard", code: "DB" },
+  { id: "users", label: "Users", code: "US" },
+  { id: "content", label: "Content", code: "CT" },
+  { id: "premium", label: "Premium", code: "PR" },
+  { id: "aiTasks", label: "AI Tasks", code: "AI" },
+  { id: "speaking", label: "Speaking", code: "SP" },
+  { id: "mistakes", label: "Mistakes", code: "MS" },
+  { id: "health", label: "Health", code: "HL" },
+  { id: "backup", label: "Backup", code: "BK" },
+  { id: "settings", label: "Settings", code: "ST" },
+];
+
+const moduleCards: ModuleCard[] = [
   {
     id: "users",
-    label: "Users",
-    description: "User list and access",
+    title: "Users",
     code: "US",
+    description: "User list, search, and access.",
+    status: "Next",
   },
   {
     id: "content",
-    label: "Content",
-    description: "Learning content studio",
+    title: "Content",
     code: "CT",
+    description: "Stories, videos, topics.",
+    status: "Ready",
   },
   {
     id: "premium",
-    label: "Premium Access",
-    description: "Plans, trials, access control",
+    title: "Premium",
     code: "PR",
+    description: "Plans, trials, access control.",
+    status: "Ready",
   },
   {
     id: "aiTasks",
-    label: "AI Tasks",
-    description: "AI feedback and usage",
+    title: "AI Tasks",
     code: "AI",
+    description: "AI feedback and usage.",
+    status: "Planned",
   },
   {
-    id: "speakingAnalytics",
-    label: "Speaking Analytics",
-    description: "Fluency and confidence trends",
-    code: "SA",
+    id: "speaking",
+    title: "Speaking",
+    code: "SP",
+    description: "Fluency, confidence, progress.",
+    status: "Planned",
   },
   {
-    id: "mistakeMemory",
-    label: "Mistake Memory",
-    description: "Repeated mistake signals",
-    code: "MM",
+    id: "mistakes",
+    title: "Mistakes",
+    code: "MS",
+    description: "Repeated grammar/pronunciation.",
+    status: "Planned",
   },
   {
-    id: "systemHealth",
-    label: "System Health",
-    description: "Backend and API checks",
-    code: "SH",
+    id: "health",
+    title: "Health",
+    code: "HL",
+    description: "Backend and API checks.",
+    status: "Next",
   },
   {
     id: "backup",
-    label: "Backup / Export",
-    description: "Data and content export",
-    code: "BE",
+    title: "Backup",
+    code: "BK",
+    description: "Export and safety backup.",
+    status: "Ready",
   },
   {
     id: "settings",
-    label: "Settings",
-    description: "Admin configuration",
+    title: "Settings",
     code: "ST",
+    description: "Admin configuration.",
+    status: "Planned",
   },
 ];
 
 const moduleDetails: Record<Exclude<AdminPage, "dashboard">, ModuleDetail> = {
   users: {
-    title: "Users Management",
+    title: "Users",
     code: "US",
-    purpose:
-      "View users, search by phone, inspect access status, and prepare safe user management workflows.",
-    currentStatus:
-      "Backend user/admin access endpoints are ready. Full table connection starts in Phase 15G.",
-    nextConnection:
-      "Connect GET /admin/users, GET /admin/users/search, and GET /admin/users/metrics.",
-    apiHint:
-      "GET /admin/users, GET /admin/users/search, GET /admin/users/{user_id}",
+    purpose: "View users, search by phone, inspect access status, and prepare safe user management workflows.",
+    currentStatus: "Backend admin user endpoints are ready.",
+    nextConnection: "Connect user list/search foundation in Phase 15G.",
+    apiHint: "GET /admin/users, GET /admin/users/search, GET /admin/users/{user_id}",
   },
   content: {
-    title: "Content Studio",
+    title: "Content",
     code: "CT",
-    purpose:
-      "Manage stories, confidence videos, reading-listening content, and conversation topics.",
-    currentStatus:
-      "Admin content list, detail, create, update, publish, unpublish, archive, and export APIs are ready.",
-    nextConnection:
-      "Connect content list first, then add safe create/edit/publish/archive actions one by one.",
-    apiHint:
-      "GET /admin/content, GET /admin/content/{content_id}, POST /admin/content",
+    purpose: "Manage stories, confidence videos, reading-listening content, and conversation topics.",
+    currentStatus: "Admin content APIs are ready.",
+    nextConnection: "Connect content list/detail foundation after users foundation.",
+    apiHint: "GET /admin/content, GET /admin/content/{content_id}",
   },
   premium: {
-    title: "Premium Access Control",
+    title: "Premium",
     code: "PR",
-    purpose:
-      "Manage free, premium, trial, scholarship, and adminManual access without touching mobile static content.",
-    currentStatus:
-      "Backend access foundation is ready. Premium should focus on AI-involved value, not static uploaded content.",
-    nextConnection:
-      "Connect admin user access update, revoke, expire, and restore-free actions after Users page is stable.",
-    apiHint:
-      "PUT /admin/users/{user_id}/access, POST /admin/users/{user_id}/access/restore-free",
+    purpose: "Manage free, premium, trial, scholarship, and adminManual access.",
+    currentStatus: "Backend access foundation is ready.",
+    nextConnection: "Connect premium actions after Users page is stable.",
+    apiHint: "PUT /admin/users/{user_id}/access, revoke, expire, restore-free",
   },
   aiTasks: {
-    title: "AI Task Monitor",
+    title: "AI Tasks",
     code: "AI",
-    purpose:
-      "Track AI feedback, AI speaking analysis, correction, coaching, and premium AI usage signals.",
-    currentStatus:
-      "Premium access guard foundation exists. AI task logging and usage metrics are planned later.",
-    nextConnection:
-      "Add AI usage/task history after core admin users and content flows are stable.",
-    apiHint: "Future: AI task logs, usage metrics, premium AI checks",
+    purpose: "Monitor AI feedback, speaking analysis, correction, coaching, and premium AI usage.",
+    currentStatus: "Premium access guard foundation exists.",
+    nextConnection: "Add AI task logs and usage metrics later.",
+    apiHint: "Future: AI task logs and premium AI usage",
   },
-  speakingAnalytics: {
-    title: "Speaking Analytics",
-    code: "SA",
-    purpose:
-      "Track fluency, confidence, speaking activity, progress trends, and real speaking improvement signals.",
-    currentStatus:
-      "Planned for the future analytics foundation. Current dashboard keeps a professional placeholder.",
-    nextConnection:
-      "Connect speaking progress data after mobile speaking activity tracking becomes stable.",
-    apiHint: "Future: speaking activity, confidence, fluency, progress history",
+  speaking: {
+    title: "Speaking",
+    code: "SP",
+    purpose: "Track speaking activity, confidence, fluency, and speaking progress trends.",
+    currentStatus: "Important future product analytics module.",
+    nextConnection: "Connect after mobile speaking activity tracking becomes stable.",
+    apiHint: "Future: confidence, fluency, speaking activity, progress history",
   },
-  mistakeMemory: {
-    title: "Mistake Memory",
-    code: "MM",
-    purpose:
-      "Track repeated mistakes, adaptive coaching signals, and personalization data for learners.",
-    currentStatus:
-      "Planned for the personalization brain. This will later support adaptive coaching and daily plans.",
-    nextConnection:
-      "Add mistake memory APIs after speaking analysis and progress storage are stable.",
+  mistakes: {
+    title: "Mistakes",
+    code: "MS",
+    purpose: "Track repeated grammar mistakes, pronunciation mistakes, weak sentence patterns, and saved corrections.",
+    currentStatus: "Important future personalization/mistake-memory module.",
+    nextConnection: "Connect after AI speaking analysis and correction storage are stable.",
     apiHint: "Future: repeated mistakes, corrections, adaptive coaching signals",
   },
-  systemHealth: {
-    title: "System Health",
-    code: "SH",
-    purpose:
-      "Check Render backend availability, API connectivity, build status, and operational readiness.",
-    currentStatus:
-      "Manual checks for now. Admin dashboard already points to the Render backend, not localhost.",
-    nextConnection:
-      "Add lightweight health/status checks after main admin pages are connected.",
-    apiHint: "GET /, future health/status endpoints",
+  health: {
+    title: "Health",
+    code: "HL",
+    purpose: "Check Render backend availability, API connectivity, and operational readiness.",
+    currentStatus: "Manual checks for now.",
+    nextConnection: "Add lightweight health/status checks later.",
+    apiHint: "GET /, future health endpoint",
   },
   backup: {
-    title: "Backup & Export",
-    code: "BE",
-    purpose:
-      "Export content and later prepare admin backup routines for JSON data, reports, and safety checkpoints.",
-    currentStatus:
-      "Content export API already exists. Full backup workflows come later.",
-    nextConnection:
-      "Connect content export download after Content Studio list/detail foundation is stable.",
+    title: "Backup",
+    code: "BK",
+    purpose: "Export content and prepare safety backup routines.",
+    currentStatus: "Content export API already exists.",
+    nextConnection: "Connect export action after content list is stable.",
     apiHint: "GET /admin/content/export",
   },
   settings: {
-    title: "Admin Settings",
+    title: "Settings",
     code: "ST",
-    purpose:
-      "Manage dashboard configuration, admin environment notes, and future owner/team settings.",
-    currentStatus:
-      "Temporary admin-key foundation is active. Production roles and admin accounts come later.",
-    nextConnection:
-      "Add settings only after core users, content, and access pages are useful.",
-    apiHint: "Future: admin profile, roles, environment settings",
+    purpose: "Manage dashboard configuration, environment notes, and future team settings.",
+    currentStatus: "Temporary admin-key foundation is active.",
+    nextConnection: "Add settings after core pages are useful.",
+    apiHint: "Future: roles, admin profile, environment settings",
   },
 };
-
-const serviceCards: ServiceCard[] = [
-  {
-    title: "Users Management",
-    code: "US",
-    description: "User list, search, and access status foundation.",
-    status: "Coming Next",
-  },
-  {
-    title: "Content Studio",
-    code: "CT",
-    description: "Stories, videos, reading-listening, and topics.",
-    status: "Foundation Ready",
-  },
-  {
-    title: "Premium Access Control",
-    code: "PR",
-    description: "Manual premium, trial, scholarship, revoke, expire.",
-    status: "Foundation Ready",
-  },
-  {
-    title: "AI Task Monitor",
-    code: "AI",
-    description: "Premium AI feedback and speaking analysis usage.",
-    status: "Planned",
-  },
-  {
-    title: "Speaking Analytics",
-    code: "SA",
-    description: "Fluency, confidence, speaking progress trends.",
-    status: "Planned",
-  },
-  {
-    title: "Mistake Memory",
-    code: "MM",
-    description: "Repeated mistakes and adaptive coaching signals.",
-    status: "Planned",
-  },
-  {
-    title: "System Health",
-    code: "SH",
-    description: "Render backend and API readiness checks.",
-    status: "Coming Next",
-  },
-  {
-    title: "Backup & Export",
-    code: "BE",
-    description: "Content export and future safety backups.",
-    status: "Foundation Ready",
-  },
-  {
-    title: "Admin Settings",
-    code: "ST",
-    description: "Environment, admin access, future team roles.",
-    status: "Planned",
-  },
-];
 
 const emptyMetrics: DashboardMetrics = {
   totalUsers: 0,
@@ -329,6 +258,7 @@ function App() {
   const [adminKeyInput, setAdminKeyInput] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [activePage, setActivePage] = useState<AdminPage>("dashboard");
+  const [searchText, setSearchText] = useState("");
 
   const [dashboardMetrics, setDashboardMetrics] =
     useState<DashboardMetrics>(emptyMetrics);
@@ -348,6 +278,23 @@ function App() {
 
     return `${savedKey.slice(0, 3)}******${savedKey.slice(-3)}`;
   }, [isLoggedIn]);
+
+  const filteredModuleCards = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+
+    if (!query) {
+      return moduleCards;
+    }
+
+    return moduleCards.filter((card) => {
+      return (
+        card.title.toLowerCase().includes(query) ||
+        card.code.toLowerCase().includes(query) ||
+        card.description.toLowerCase().includes(query) ||
+        card.status.toLowerCase().includes(query)
+      );
+    });
+  }, [searchText]);
 
   async function loadDashboardMetrics() {
     if (!hasAdminKey()) {
@@ -420,6 +367,7 @@ function App() {
     setDashboardError("");
     setDashboardMetrics(emptyMetrics);
     setActivePage("dashboard");
+    setSearchText("");
     setIsLoggedIn(false);
   }
 
@@ -433,7 +381,7 @@ function App() {
 
   function getPageSubtitle() {
     if (activePage === "dashboard") {
-      return "Professional founder dashboard for backend, content, premium access, AI tasks, analytics, and operations.";
+      return "Compact founder dashboard for users, content, premium access, AI tasks, speaking, mistakes, health, and backups.";
     }
 
     return moduleDetails[activePage].purpose;
@@ -449,180 +397,132 @@ function App() {
     );
   }
 
-  function renderStatusStrip() {
+  function renderStatusRow() {
     return (
-      <div className="status-strip">
-        <div>
-          <span>Backend</span>
-          <strong>Render API</strong>
-        </div>
-        <div>
-          <span>Admin Key</span>
-          <strong>Saved Locally</strong>
-        </div>
-        <div>
-          <span>Mobile App</span>
-          <strong>Separate / Clean</strong>
-        </div>
-        <div>
-          <span>Environment</span>
-          <strong>Development Admin</strong>
-        </div>
+      <div className="compact-status-row">
+        <span><b>Backend:</b> Render</span>
+        <span><b>Admin Key:</b> Saved</span>
+        <span><b>Mode:</b> Development</span>
+        <span><b>Mobile:</b> Separate</span>
       </div>
     );
   }
 
-  function renderServiceCard(card: ServiceCard) {
+  function renderModuleCard(card: ModuleCard) {
     return (
-      <article className="service-card" key={card.title}>
-        <div className="service-card-header">
-          <div className="module-code">{card.code}</div>
-          <span className={`status-pill status-${card.status.toLowerCase().replaceAll(" ", "-")}`}>
+      <button
+        className="module-card"
+        key={card.id}
+        type="button"
+        onClick={() => setActivePage(card.id)}
+      >
+        <div className="module-card-top">
+          <span className="module-code">{card.code}</span>
+          <span className={`status-pill status-${card.status.toLowerCase()}`}>
             {card.status}
           </span>
         </div>
-
-        <h3>{card.title}</h3>
-        <p>{card.description}</p>
-      </article>
+        <strong>{card.title}</strong>
+        <small>{card.description}</small>
+      </button>
     );
   }
 
   function renderDashboardContent() {
-    if (isDashboardLoading) {
-      return (
-        <section className="page-card">
-          <div className="module-code large">DB</div>
-          <h2>Loading dashboard metrics...</h2>
-          <p>
-            Render may take a little time to wake up. The dashboard is requesting
-            user metrics and content totals now.
-          </p>
-        </section>
-      );
-    }
-
-    if (dashboardError) {
-      return (
-        <>
-          <section className="page-card alert-card">
-            <div className="module-code large warning">!</div>
-            <h2>Unable to load dashboard metrics.</h2>
-            <p>{dashboardError}</p>
-
+    return (
+      <>
+        <section className="compact-card">
+          <div className="dashboard-topline">
+            <div>
+              <h2>Dashboard</h2>
+              <p>Fast access control panel. Search filters modules for now.</p>
+            </div>
             <button
-              className="primary-button inline-button"
+              className="small-button"
+              type="button"
+              onClick={loadDashboardMetrics}
+            >
+              Refresh
+            </button>
+          </div>
+
+          <input
+            className="command-search"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search modules, users, content..."
+            type="search"
+          />
+
+          {renderStatusRow()}
+        </section>
+
+        {isDashboardLoading ? (
+          <section className="compact-card">
+            <div className="message-row">
+              <span className="module-code">DB</span>
+              <div>
+                <h2>Loading dashboard metrics...</h2>
+                <p>Render may take a little time to wake up.</p>
+              </div>
+            </div>
+          </section>
+        ) : dashboardError ? (
+          <section className="compact-card alert-card">
+            <div className="message-row">
+              <span className="module-code warning">!</span>
+              <div>
+                <h2>Unable to load dashboard metrics.</h2>
+                <p>{dashboardError}</p>
+              </div>
+            </div>
+            <button
+              className="small-button primary-small"
               type="button"
               onClick={loadDashboardMetrics}
             >
               Retry
             </button>
           </section>
-
-          <section className="page-card">
-            <h2>Control Center Modules</h2>
-            <p>
-              The dashboard shell is ready. Metrics need a valid Render admin key
-              to load real backend data.
-            </p>
-            <div className="service-grid">{serviceCards.map(renderServiceCard)}</div>
-          </section>
-        </>
-      );
-    }
-
-    return (
-      <>
-        <section className="page-card">
-          <div className="section-heading">
-            <div>
-              <div className="module-code large">DB</div>
-              <h2>Operations Overview</h2>
-              <p>
-                Dashboard summary cards connect to existing backend admin APIs.
-              </p>
+        ) : (
+          <section className="compact-card">
+            <div className="compact-section-title">
+              <h2>Metrics</h2>
+              <span>Connected to Render admin APIs</span>
             </div>
+
+            <div className="metrics-grid compact">
+              {renderMetricCard("Users", dashboardMetrics.totalUsers, "Total")}
+              {renderMetricCard("Premium", dashboardMetrics.premiumUsers, "Active premium")}
+              {renderMetricCard("Free", dashboardMetrics.freeUsers, "Free access")}
+              {renderMetricCard("Content", dashboardMetrics.totalContent, "All items")}
+              {renderMetricCard("Published", dashboardMetrics.publishedContent, "Visible")}
+              {renderMetricCard("Unpublished", dashboardMetrics.unpublishedContent, "Hidden")}
+              {renderMetricCard("Expired", dashboardMetrics.expiredUsers, "Expired")}
+              {renderMetricCard("Revoked", dashboardMetrics.revokedUsers, "Revoked")}
+            </div>
+          </section>
+        )}
+
+        <section className="compact-card">
+          <div className="compact-section-title">
+            <h2>Modules</h2>
+            <span>{filteredModuleCards.length} visible</span>
           </div>
 
-          {renderStatusStrip()}
-
-          <div className="metrics-grid">
-            {renderMetricCard(
-              "Total Users",
-              dashboardMetrics.totalUsers,
-              "All registered users"
-            )}
-            {renderMetricCard(
-              "Free Users",
-              dashboardMetrics.freeUsers,
-              "Users on free access"
-            )}
-            {renderMetricCard(
-              "Premium Users",
-              dashboardMetrics.premiumUsers,
-              "Users with premium access"
-            )}
-            {renderMetricCard(
-              "Expired Users",
-              dashboardMetrics.expiredUsers,
-              "Expired access records"
-            )}
-            {renderMetricCard(
-              "Revoked Users",
-              dashboardMetrics.revokedUsers,
-              "Revoked access records"
-            )}
-            {renderMetricCard(
-              "Total Content",
-              dashboardMetrics.totalContent,
-              "All admin content items"
-            )}
-            {renderMetricCard(
-              "Published Content",
-              dashboardMetrics.publishedContent,
-              "Visible public content"
-            )}
-            {renderMetricCard(
-              "Unpublished Content",
-              dashboardMetrics.unpublishedContent,
-              "Hidden or archived content"
+          <div className="module-grid">
+            {filteredModuleCards.length > 0 ? (
+              filteredModuleCards.map(renderModuleCard)
+            ) : (
+              <p className="empty-state">No modules match this search.</p>
             )}
           </div>
         </section>
 
-        <section className="page-card">
-          <h2>Control Center Services</h2>
-          <p>
-            Professional admin modules are organized now. Each module will be
-            connected safely one phase at a time.
-          </p>
-          <div className="service-grid">{serviceCards.map(renderServiceCard)}</div>
-        </section>
-
-        <section className="page-card action-panel">
-          <div>
-            <h2>Next Recommended Build Steps</h2>
-            <p>
-              Keep the dashboard professional while connecting real features in a
-              safe order.
-            </p>
-          </div>
-
-          <ol className="next-steps">
-            <li>Connect Users Management list/search foundation.</li>
-            <li>Connect Content Studio list/detail foundation.</li>
-            <li>Add Premium Access controls after Users page is stable.</li>
-            <li>Add System Health checks and Backup export actions.</li>
-          </ol>
-        </section>
-
-        <section className="page-card compact-card">
+        <section className="tiny-note-card">
           <span>Saved Admin Key</span>
           <strong>{maskedAdminKey}</strong>
-          <p>
-            Dashboard requests use this key in the X-Admin-Key header through
-            the admin API client.
-          </p>
+          <p>Requests use X-Admin-Key through the admin API client.</p>
         </section>
       </>
     );
@@ -632,26 +532,34 @@ function App() {
     const detail = moduleDetails[page];
 
     return (
-      <section className="page-card module-detail-card">
-        <div className="module-code large">{detail.code}</div>
-        <h2>{detail.title}</h2>
-        <p>{detail.purpose}</p>
+      <>
+        <section className="compact-card">
+          <div className="module-page-heading">
+            <span className="module-code large">{detail.code}</span>
+            <div>
+              <h2>{detail.title}</h2>
+              <p>{detail.purpose}</p>
+            </div>
+          </div>
+        </section>
 
-        <div className="detail-grid">
-          <div>
-            <span>Current Status</span>
-            <strong>{detail.currentStatus}</strong>
+        <section className="compact-card">
+          <div className="detail-grid">
+            <div>
+              <span>Current Status</span>
+              <strong>{detail.currentStatus}</strong>
+            </div>
+            <div>
+              <span>Next Connection</span>
+              <strong>{detail.nextConnection}</strong>
+            </div>
+            <div>
+              <span>API / Future Service</span>
+              <strong>{detail.apiHint}</strong>
+            </div>
           </div>
-          <div>
-            <span>Next Planned Connection</span>
-            <strong>{detail.nextConnection}</strong>
-          </div>
-          <div>
-            <span>Relevant API / Future Service</span>
-            <strong>{detail.apiHint}</strong>
-          </div>
-        </div>
-      </section>
+        </section>
+      </>
     );
   }
 
@@ -670,7 +578,7 @@ function App() {
           <p className="eyebrow">AI English Coach</p>
           <h1>Admin Login</h1>
           <p className="lead">
-            Enter your admin key to access the professional admin control center.
+            Enter your admin key to access the compact admin control center.
           </p>
 
           <form className="login-form" onSubmit={handleLogin}>
@@ -720,10 +628,7 @@ function App() {
               onClick={() => setActivePage(item.id)}
             >
               <span className="nav-code">{item.code}</span>
-              <span className="nav-text">
-                <strong>{item.label}</strong>
-                <small>{item.description}</small>
-              </span>
+              <strong>{item.label}</strong>
             </button>
           ))}
         </nav>
@@ -734,9 +639,9 @@ function App() {
       </aside>
 
       <section className="main-panel">
-        <header className="page-header">
+        <header className="page-header compact-header">
           <div>
-            <p className="eyebrow">Phase 15F-2</p>
+            <p className="eyebrow">Phase 15F-3</p>
             <h1>{getPageTitle()}</h1>
             <p>{getPageSubtitle()}</p>
           </div>
