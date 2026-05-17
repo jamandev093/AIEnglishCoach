@@ -630,3 +630,16 @@ button {
   text-align: center;
 }
 
+/* Phase 15F polish: reduce sidebar function card height only */
+.sidebar-nav .nav-button {
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+  min-height: 0 !important;
+}
+
+.sidebar-nav .nav-code {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 12px !important;
+}
+
