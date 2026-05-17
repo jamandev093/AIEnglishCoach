@@ -20,6 +20,11 @@ body {
   min-height: 100vh;
 }
 
+button,
+input {
+  font: inherit;
+}
+
 .admin-shell {
   min-height: 100vh;
   display: grid;
@@ -27,13 +32,25 @@ body {
   padding: 32px;
 }
 
-.hero-card {
+.hero-card,
+.auth-card {
   width: min(920px, 100%);
   border-radius: 28px;
   background: #ffffff;
   padding: 44px;
   box-shadow: 0 24px 70px rgba(39, 69, 130, 0.14);
   border: 1px solid rgba(132, 153, 220, 0.28);
+}
+
+.auth-card {
+  width: min(560px, 100%);
+}
+
+.top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
 }
 
 .eyebrow {
@@ -47,7 +64,7 @@ body {
 
 h1 {
   margin: 0;
-  font-size: clamp(36px, 5vw, 58px);
+  font-size: clamp(34px, 5vw, 56px);
   line-height: 1.04;
   letter-spacing: -0.04em;
 }
@@ -59,6 +76,80 @@ h1 {
   line-height: 1.6;
 }
 
+.login-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.login-form label {
+  color: #172033;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.login-form input {
+  width: 100%;
+  border: 1px solid rgba(132, 153, 220, 0.45);
+  border-radius: 16px;
+  padding: 15px 16px;
+  color: #172033;
+  background: #f8faff;
+  outline: none;
+}
+
+.login-form input:focus {
+  border-color: #8499dc;
+  box-shadow: 0 0 0 4px rgba(132, 153, 220, 0.18);
+}
+
+.primary-button,
+.secondary-button {
+  border: 0;
+  border-radius: 16px;
+  cursor: pointer;
+  font-weight: 800;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.primary-button {
+  margin-top: 6px;
+  padding: 15px 18px;
+  color: #ffffff;
+  background: #8499dc;
+  box-shadow: 0 14px 30px rgba(132, 153, 220, 0.32);
+}
+
+.secondary-button {
+  padding: 12px 16px;
+  color: #172033;
+  background: #f1f4ff;
+  border: 1px solid rgba(132, 153, 220, 0.28);
+}
+
+.primary-button:hover,
+.secondary-button:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button:active,
+.secondary-button:active {
+  transform: translateY(0);
+}
+
+.error-message {
+  margin: 0;
+  color: #c83737;
+  background: #fff3f3;
+  border: 1px solid rgba(200, 55, 55, 0.2);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-weight: 700;
+}
+
 .status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -66,25 +157,38 @@ h1 {
   margin-top: 32px;
 }
 
-.status-card {
+.status-card,
+.connection-panel {
   border-radius: 22px;
   padding: 20px;
   background: #f6f8ff;
   border: 1px solid rgba(132, 153, 220, 0.22);
 }
 
-.status-card span {
+.status-card span,
+.connection-panel span {
   display: block;
   color: #65708a;
   font-size: 14px;
   margin-bottom: 8px;
 }
 
-.status-card strong {
+.status-card strong,
+.connection-panel strong {
   display: block;
   color: #172033;
   font-size: 18px;
   line-height: 1.35;
+}
+
+.connection-panel {
+  margin-top: 16px;
+}
+
+.connection-panel p {
+  margin: 10px 0 0;
+  color: #65708a;
+  line-height: 1.7;
 }
 
 .note {
@@ -98,12 +202,21 @@ h1 {
     padding: 18px;
   }
 
-  .hero-card {
+  .hero-card,
+  .auth-card {
     padding: 28px;
     border-radius: 22px;
   }
 
+  .top-row {
+    flex-direction: column;
+  }
+
   .status-grid {
     grid-template-columns: 1fr;
+  }
+
+  .secondary-button {
+    width: 100%;
   }
 }
