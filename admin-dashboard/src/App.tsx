@@ -76,6 +76,13 @@ type UserMetricKey =
   | "unpaid"
   | "nonSerious";
 
+type ContentTab =
+  | "all"
+  | "upload"
+  | "published"
+  | "saved"
+  | "deleted";
+
 const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", code: "DB" },
   { id: "users", label: "Users", code: "US" },
@@ -191,6 +198,14 @@ function App() {
   const [usersError, setUsersError] = useState("");
   const [selectedUserMetric, setSelectedUserMetric] =
     useState<UserMetricKey>("all");
+
+  const [activeContentTab, setActiveContentTab] =
+    useState<ContentTab>("all");
+  const [contentSearchInput, setContentSearchInput] = useState("");
+  const [contentTypeFilter, setContentTypeFilter] = useState("all");
+  const [contentDateFilter, setContentDateFilter] = useState("");
+  const [selectedContentType, setSelectedContentType] =
+    useState("Reading & Listening");
 
   const [dashboardMetrics, setDashboardMetrics] =
     useState<DashboardMetrics>(emptyMetrics);
@@ -379,7 +394,7 @@ function App() {
     }
 
     if (activePage === "content") {
-      return "Manage stories, confidence videos, reading-listening content, and topics.";
+      return "Manage Reading & Listening, Stories, Practice Topics, and Confidence Videos.";
     }
 
     if (activePage === "premium") {
@@ -546,9 +561,7 @@ function App() {
             <div>
               <strong>Status</strong>
               <span>
-                {isDashboardLoading
-                  ? "Loading user metrics..."
-                  : dashboardError}
+                {isDashboardLoading ? "Loading user metrics..." : dashboardError}
               </span>
             </div>
 
@@ -661,7 +674,8 @@ function App() {
       </>
     );
   }
-function renderAdminAccountPage() {
+
+  function renderAdminAccountPage() {
     return (
       <>
         <section className="compact-card">
@@ -706,6 +720,266 @@ function renderAdminAccountPage() {
             <button type="button" onClick={() => setActivePage("settings")}>Settings <span>Configuration</span></button>
           </div>
         </section>
+      </>
+    );
+  }
+
+  function renderContentMetricCard(
+    title: string,
+    value: number,
+    helper: string
+  ) {
+    return (
+      <button
+        className={`content-type-card ${
+          selectedContentType === title ? "active-content-type" : ""
+        }`}
+        type="button"
+        onClick={() => setSelectedContentType(title)}
+      >
+        <span>{title}</span>
+        <strong>{value}</strong>
+        <small>{helper}</small>
+      </button>
+    );
+  }
+
+  function renderContentTabButton(tab: ContentTab, label: string) {
+    return (
+      <button
+        className={`content-tab-button ${
+          activeContentTab === tab ? "active-content-tab" : ""
+        }`}
+        type="button"
+        onClick={() => setActiveContentTab(tab)}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  function renderContentPlaceholderRow(
+    title: string,
+    type: string,
+    status: string,
+    tags: string,
+    date: string
+  ) {
+    return (
+      <div className="content-library-row">
+        <div>
+          <span>Title</span>
+          <strong>{title}</strong>
+        </div>
+        <div>
+          <span>Type</span>
+          <strong>{type}</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong>{status}</strong>
+        </div>
+        <div>
+          <span>Tags</span>
+          <strong>{tags}</strong>
+        </div>
+        <div>
+          <span>Publish Date</span>
+          <strong>{date}</strong>
+        </div>
+      </div>
+    );
+  }
+
+  function renderContentTabPanel() {
+    if (activeContentTab === "upload") {
+      return (
+        <section className="compact-card">
+          <div className="module-page-heading">
+            <span className="module-code large">UP</span>
+            <div>
+              <h2>Upload / Create</h2>
+              <p>
+                Future place to manually create Reading & Listening, Stories,
+                Practice Topics, and Confidence Videos.
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    if (activeContentTab === "published") {
+      return (
+        <section className="compact-card">
+          <div className="module-page-heading">
+            <span className="module-code large">PB</span>
+            <div>
+              <h2>Published Content</h2>
+              <p>
+                Published content list will connect here later. No publish
+                action is added in this phase.
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    if (activeContentTab === "saved") {
+      return (
+        <section className="compact-card">
+          <div className="module-page-heading">
+            <span className="module-code large">SV</span>
+            <div>
+              <h2>Saved Drafts</h2>
+              <p>
+                Saved draft content will appear here later before publishing.
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    if (activeContentTab === "deleted") {
+      return (
+        <section className="compact-card">
+          <div className="module-page-heading">
+            <span className="module-code large">AR</span>
+            <div>
+              <h2>Deleted / Archived</h2>
+              <p>
+                Safe archive/recovery area. Permanent delete is not added now.
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    return (
+      <section className="compact-card">
+        <div className="compact-section-title">
+          <div>
+            <h2>Content Library</h2>
+            <p>
+              Scroll and find manually managed content by section. Real content
+              list connection comes later.
+            </p>
+          </div>
+        </div>
+
+        <div className="content-section-stack">
+          <div className="content-section-block">
+            <h3>Reading & Listening</h3>
+            {renderContentPlaceholderRow(
+              "Reading lesson title",
+              "Reading & Listening",
+              "Foundation",
+              "listening, reading",
+              "Later"
+            )}
+          </div>
+
+          <div className="content-section-block">
+            <h3>Stories</h3>
+            {renderContentPlaceholderRow(
+              "Story title",
+              "Stories",
+              "Foundation",
+              "story, speaking",
+              "Later"
+            )}
+          </div>
+
+          <div className="content-section-block">
+            <h3>Practice Topics</h3>
+            {renderContentPlaceholderRow(
+              "Practice topic title",
+              "Practice Topics",
+              "Foundation",
+              "topic, conversation",
+              "Later"
+            )}
+          </div>
+
+          <div className="content-section-block">
+            <h3>Confidence Videos</h3>
+            {renderContentPlaceholderRow(
+              "Confidence video title",
+              "Confidence Videos",
+              "Foundation",
+              "confidence, video",
+              "Later"
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  function renderContentPage() {
+    return (
+      <>
+        <section className="content-type-strip" aria-label="Content types">
+          {renderContentMetricCard("Reading & Listening", 0, "Manual lessons")}
+          {renderContentMetricCard("Stories", 0, "Picture/story content")}
+          {renderContentMetricCard("Practice Topics", 0, "Conversation topics")}
+          {renderContentMetricCard("Confidence Videos", 0, "10-second missions")}
+        </section>
+
+        <section className="content-tabs-bar" aria-label="Content sections">
+          {renderContentTabButton("all", "All Content")}
+          {renderContentTabButton("upload", "Upload / Create")}
+          {renderContentTabButton("published", "Published")}
+          {renderContentTabButton("saved", "Saved Drafts")}
+          {renderContentTabButton("deleted", "Deleted / Archived")}
+        </section>
+
+        <section className="content-search-panel">
+          <div>
+            <h2>Find content</h2>
+            <p>Search by title, tags, content type, and publish date.</p>
+          </div>
+
+          <div className="content-search-grid">
+            <input
+              value={contentSearchInput}
+              onChange={(event) => setContentSearchInput(event.target.value)}
+              placeholder="Search by title or tags"
+              type="search"
+            />
+
+            <select
+              value={contentTypeFilter}
+              onChange={(event) => setContentTypeFilter(event.target.value)}
+            >
+              <option value="all">All Types</option>
+              <option value="readingListening">Reading & Listening</option>
+              <option value="stories">Stories</option>
+              <option value="practiceTopics">Practice Topics</option>
+              <option value="confidenceVideos">Confidence Videos</option>
+            </select>
+
+            <input
+              value={contentDateFilter}
+              onChange={(event) => setContentDateFilter(event.target.value)}
+              type="date"
+            />
+
+            <button className="small-button primary-small" type="button">
+              Search
+            </button>
+          </div>
+
+          <p className="content-search-note">
+            Search UI is ready. Real content filtering will connect after the
+            content list foundation.
+          </p>
+        </section>
+
+        {renderContentTabPanel()}
       </>
     );
   }
@@ -780,12 +1054,9 @@ function renderAdminAccountPage() {
     if (activePage === "adminAccount") return renderAdminAccountPage();
     if (activePage === "dashboard") return renderDashboardPage();
     if (activePage === "users") return renderUsersPage();
+    if (activePage === "content") return renderContentPage();
     if (activePage === "aiUsage") return renderAiUsagePage();
     if (activePage === "systemHealth") return renderSystemHealthPage();
-
-    if (activePage === "content") {
-      return renderSimplePage("CT", "Content", "Manage stories, videos, reading-listening content, and topics.", "Admin content APIs are ready.", "Connect content list/detail foundation after Users page.", "GET /admin/content, GET /admin/content/{content_id}");
-    }
 
     if (activePage === "premium") {
       return renderSimplePage("PR", "Premium", "Manage free, premium, trial, scholarship, and adminManual access.", "Backend access foundation is ready.", "Connect premium actions after Users page is stable.", "PUT /admin/users/{user_id}/access, revoke, expire, restore-free");
@@ -894,4 +1165,3 @@ function renderAdminAccountPage() {
 }
 
 export default App;
-
